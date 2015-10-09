@@ -7,7 +7,7 @@ static int Test_HalmosReader_Get()
 {
   HalmosError err;
   int c;
-  char s[60] =
+  const char s[60] =
   "In Xanadu did Kubla Khan\n"
   "A stately pleasure-dome decree :";
   HalmosReader r;
@@ -31,16 +31,16 @@ static int Test_HalmosReader_Get()
   }
   c = HalmosReader_Get(&r);
   ut_assert(c == 0, "get() == %c, expected 0", c);
-  ut_assert(r.err == HalmosError_Reader_EndOfString, ".err == %s, expected %s",
+  ut_assert(r.err == HalmosError_EndOfString, ".err == %s, expected %s",
     HalmosError_String(r.err),
-     HalmosError_String(HalmosError_Reader_EndOfString));
+     HalmosError_String(HalmosError_EndOfString));
   return 0;
 }
 
 static int Test_HalmosReader_GetToken()
 {
   HalmosError err;
-  char s[] = 
+  const char s[] = 
   "Where Alph, the sacred river, ran\n"
   "Through caverns measureless to man\n"
   "Down to a sunless sea.";
@@ -58,16 +58,16 @@ static int Test_HalmosReader_GetToken()
   ut_assert(strcmp(r.tok, "Alph") == 0, "tok == %s, expected Alph", r.tok);
   err = HalmosReader_GetToken(&r, "$");
   ut_assert(r.err == err, "returned error and .err mismatch");
-  char t[HalmosReader_TokenSize + 2];
-  memset(t, 'a', HalmosReader_TokenSize);
-  t[HalmosReader_TokenSize] = '@';
-  t[HalmosReader_TokenSize + 1] = '\0';
+  char t[HalmosReader_TokenMax + 2];
+  memset(t, 'a', HalmosReader_TokenMax);
+  t[HalmosReader_TokenMax] = '@';
+  t[HalmosReader_TokenMax + 1] = '\0';
   HalmosReader_InitString(&r, t);
   err = HalmosReader_GetToken(&r, "@");
   ut_assert(r.err == err, "returned error and .err mismatch");
-  ut_assert(r.err == HalmosError_Reader_TokenTooBig, ".err == %s, expected %s",
+  ut_assert(r.err == HalmosError_TokenTooBig, ".err == %s, expected %s",
     HalmosError_String(r.err),
-     HalmosError_String(HalmosError_Reader_TokenTooBig));
+     HalmosError_String(HalmosError_TokenTooBig));
   return 0;
 }
 
@@ -75,7 +75,7 @@ static int Test_HalmosReader_Skip()
 {
   HalmosError err;
   int c;
-  char f[] =
+  const char f[] =
   "So twice five miles of fertile ground\n"
   "With walls and towers were girdled round;";
   HalmosReader r;
@@ -91,9 +91,27 @@ static int Test_HalmosReader_Skip()
   err =
    HalmosReader_Skip(&r, "tileground\nWithwallsandtowersweregirdledround; ");
   ut_assert(r.err == err, "returned error and .err mismatch");
-  ut_assert(r.err == HalmosError_Reader_EndOfString, ".err == %s, expected %s",
+  ut_assert(r.err == HalmosError_EndOfString, ".err == %s, expected %s",
     HalmosError_String(r.err),
-     HalmosError_String(HalmosError_Reader_EndOfString));
+     HalmosError_String(HalmosError_EndOfString));
+  return 0;
+}
+
+static int Test_HalmosReader_Find()
+{
+  HalmosError err;
+  int c;
+  const char f[] =
+  "And there were gardens bright with sinuous rills,\n"
+  "Where blossomed many many an incense-bearing tree";
+  HalmosReader r;
+  HalmosReader_InitString(&r, f);
+  err = HalmosReader_Find(&r, "g");
+  ut_assert(r.err == err, "returned error and .err mismatch");
+  ut_assert(err == HalmosError_None, "err == %s, expected None",
+    HalmosError_String(err));
+  c = HalmosReader_Get(&r);
+  ut_assert(c == 'g', "Get() == %c, expected g", c);
   return 0;
 }
 
@@ -102,6 +120,7 @@ static int all()
   ut_run(Test_HalmosReader_Get);
   ut_run(Test_HalmosReader_GetToken);
   ut_run(Test_HalmosReader_Skip);
+  ut_run(Test_HalmosReader_Find);
   return 0;
 }
 

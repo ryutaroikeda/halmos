@@ -1,44 +1,67 @@
 #ifndef _HALMOSDBG_H_
 #define _HALMOSDBG_H_
 
+#include "error.h"
 #include <stdio.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
+
+#if defined (__GNUC__)
+#define __FUNC__ __PRETTY_FUNCTION__
+#else
+#define __FUNC__ "unknown"
+#endif
 
 #ifdef NDEBUG
 #define debug(...)
+#define debug_assert(test, ...)
+#define _log(lab, ...)
 #else
-#define debug(...) \
+#define debug(...) _log("DEBUG", __VA_ARGS__)
+
+#define debug_assert(test, ...) \
 do { \
-  fprintf(stderr, "DEBUG %s:%d ", __FILE__, __LINE__); \
+  if (!test) { \
+    _log("ASSERT FAILED", __VA_ARGS__); \
+    abort(); \
+  } \
+} while (0)
+
+#endif /* NDEBUG */
+
+#define _clearerrno() (errno == 0 ? "None" : strerror(errno))
+
+#define _log(lab, ...) \
+do { \
+  fprintf(stderr, "%s:%d:%s " lab " [errno: %s] ", __FILE__, __LINE__, \
+   __FUNC__, _clearerrno());\
   fprintf(stderr, __VA_ARGS__); \
   fprintf(stderr, "\n"); \
 } while (0)
-#endif
 
-#define clear_errno() (errno == 0 ? "None" : strerror(errno))
-
-#define log_err(...) \
+#define _hlog(lab, head, ...) \
 do { \
-  fprintf(stderr, "ERROR %s:%d [errno: %s] ", \
-    __FILE__, __LINE__, clear_errno()); \
+  fprintf(stderr, "%s:%lu:%lu: " lab, head.filename, \
+    (unsigned long)head.line, (unsigned long)head.offset); \
   fprintf(stderr, __VA_ARGS__); \
-  fprintf(stderr, "\n"); \
+  fprintf(stderr, " [%s]\n", HalmosError_String(head.err)); \
 } while (0)
 
-#define log_warn(...) \
-do { \
-  fprintf(stderr, "WARN %s:%d [errno: %s] ", \
-   __FILE__, __LINE__, clear_errno()); \
-  fprintf(stderr, __VA_ARGS__); \
-  fprintf("\n"); \
-} while (0)
+#define log_fat(...) _log("FATAL", __VA_ARGS__)
 
-#define log_info(...) \
-do { \
-  fprintf(stderr, "INFO %s:%d ", __FILE__, __LINE__); \
-  fprintf(stderr, __VA_ARGS__); \
-  fprintf("\n"); \
-} while (0)
+#define log_err(...) _log("ERROR", __VA_ARGS__)
 
-#endif
+#define log_warn(...) _log("WARN", __VA_ARGS__)
+
+#define log_info(...) _log("INFO", __VA_ARGS__)
+
+#define hlog_fat(head, ...) _hlog("FATAL", head, __VA_ARGS__)
+
+#define hlog_err(head, ...) _hlog("ERROR", head, __VA_ARGS__)
+
+#define hlog_warn(head, ...) _hlog("WARN", head, __VA_ARGS__)
+
+#define hlog_info(head, ...) _hlog("INFO", head, __VA_ARGS__)
+
+#endif /* _HALMOSDBG_H_ */
