@@ -22,6 +22,8 @@ struct HalmosReader {
   size_t offset;
   int skipped;
   int didSkip;
+  /* the character before a match or EOF with GetToken() and Skip() */
+  int last;
   HalmosCharGetter get;
   HalmosError err;
 };

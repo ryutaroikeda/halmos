@@ -16,7 +16,8 @@ static const char* errorStrings[HalmosError_Max] = {
   "Unterminated statement",
   "Expected whitespace after a keyword token",
   "ExpectedEndStatement",
-  "Expected keyword symbol $",
+  "ExpectedNewLine",
+  "Invalid symbol name",
   /* */
 };
 

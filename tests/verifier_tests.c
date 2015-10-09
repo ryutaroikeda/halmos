@@ -34,15 +34,16 @@ static int Test_HalmosVerifier_ParseComment()
   ut_assert(vrf.err == HalmosError_UnterminatedComment,
     ".err == %s, expected %s", HalmosError_String(vrf.err),
     HalmosError_String(HalmosError_UnterminatedComment));
-  HalmosVerifier_Clean(&vrf);
+  HalmosVerifier_Clear(&vrf);
   return 0;
 }
 
 static int Test_HalmosVerifier_AddConstant()
 {
-  char sym[] = "Asavageplace!asholyandenchanted";
+  char* sym = "Asavageplace!asholyandenchanted";
   HalmosError err;
   HalmosReader r;
+  HalmosReader_InitString(&r, "");
   HalmosConfiguration conf;
   conf.constantMax = 1;
   HalmosVerifier vrf;
@@ -50,6 +51,57 @@ static int Test_HalmosVerifier_AddConstant()
   check_err(err, HalmosError_None);
   err = HalmosVerifier_AddConstant(&vrf, sym);
   ut_assert(vrf.constantSize == 1, ".constantSize wrong");
+  err = HalmosVerifier_AddConstant(&vrf, sym);
+  check_err(err, HalmosError_DuplicateSymbol);
+  ut_assert(vrf.constantSize == 1, ".constantSize wrong");
+  char bigsym[HalmosVerifier_ConstantSymbolMax + 1];
+  memset(bigsym, 'a', HalmosVerifier_ConstantSymbolMax);
+  bigsym[HalmosVerifier_ConstantSymbolMax] = '\0';
+  err = HalmosVerifier_AddConstant(&vrf, bigsym);
+  check_err(err, HalmosError_SymbolTooBig);
+  ut_assert(vrf.constantSize == 1, ".constantSize wrong");
+  sym = "Ase'erbeneathawaningmoonwashaunted";
+  err = HalmosVerifier_AddConstant(&vrf, sym);
+  check_err(err, HalmosError_None);
+  ut_assert(vrf.constantSize == 2, ".constantSize wrong");
+  ut_assert(vrf.constantMax == 2, ".constantMax wrong");
+  HalmosVerifier_Clear(&vrf);
+  return 0;
+}
+
+static int Test_HalmosVerifier_ParseConstants()
+{
+  char* file;
+  HalmosError err;
+  HalmosReader r;
+  HalmosConfiguration conf;
+  conf.constantMax = 1;
+  HalmosVerifier vrf;
+#define testfile(f, e) \
+  do { \
+    file = f; \
+    HalmosReader_InitString(&r, file); \
+    HalmosVerifier_Init(&vrf, &r, &conf); \
+    err = HalmosVerifier_ParseConstants(&vrf); \
+    check_err(err, e); \
+    HalmosVerifier_Clear(&vrf); \
+  } while (0)
+
+  testfile("By woman wailing for her demon-lover! $$",
+   HalmosError_ExpectedEndStatement);
+  testfile("And from this chasm with ceaseless turmoil seething, $..",
+    HalmosError_ExpectedWhitespace);
+  testfile("As if this earth in fast thick pants were breathing, $.",
+    HalmosError_ExpectedNewLine);
+  testfile("A mighty mountain was momently forced:",
+    HalmosError_UnterminatedStatement);
+  testfile("Amid those swift half-intermitted bursts$. ",
+    HalmosError_InvalidSymbolName);
+  char g[HalmosReader_TokenMax + 2];
+  memset(g, 'a', HalmosReader_TokenMax + 2);
+  g[HalmosReader_TokenMax + 1] = '\0';
+  testfile(g, HalmosError_TokenTooBig);
+#undef testfile
   return 0;
 }
 
@@ -57,6 +109,7 @@ static int all()
 {
   ut_run(Test_HalmosVerifier_ParseComment);
   ut_run(Test_HalmosVerifier_AddConstant);
+  ut_run(Test_HalmosVerifier_ParseConstants);
   return 0;
 }
 

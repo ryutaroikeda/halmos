@@ -42,7 +42,7 @@ do { \
 
 #define _hlog(lab, head, ...) \
 do { \
-  fprintf(stderr, "%s:%lu:%lu: " lab, head.filename, \
+  fprintf(stderr, "%s:%lu:%lu: " lab " ", head.filename, \
     (unsigned long)head.line, (unsigned long)head.offset); \
   fprintf(stderr, __VA_ARGS__); \
   fprintf(stderr, " [%s]\n", HalmosError_String(head.err)); \
@@ -56,12 +56,12 @@ do { \
 
 #define log_info(...) _log("INFO", __VA_ARGS__)
 
-#define hlog_fat(head, ...) _hlog("FATAL", head, __VA_ARGS__)
+#define hlog_fat(head, ...) _hlog("fatal:", head, __VA_ARGS__)
 
-#define hlog_err(head, ...) _hlog("ERROR", head, __VA_ARGS__)
+#define hlog_err(head, ...) _hlog("error:", head, __VA_ARGS__)
 
-#define hlog_warn(head, ...) _hlog("WARN", head, __VA_ARGS__)
+#define hlog_warn(head, ...) _hlog("warn:", head, __VA_ARGS__)
 
-#define hlog_info(head, ...) _hlog("INFO", head, __VA_ARGS__)
+#define hlog_info(head, ...) _hlog("info:", head, __VA_ARGS__)
 
 #endif /* _HALMOSDBG_H_ */

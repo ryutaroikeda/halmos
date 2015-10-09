@@ -71,12 +71,13 @@ HalmosError
 HalmosVerifier_Init(HalmosVerifier* vrf, HalmosReader* r,
   const HalmosConfiguration* conf);
 
-HalmosError HalmosVerifier_Clean(HalmosVerifier* vrf);
+HalmosError HalmosVerifier_Clear(HalmosVerifier* vrf);
 
 HalmosError HalmosVerifier_AddConstant(HalmosVerifier* vrf, const char* symbol);
 
 HalmosError HalmosVerifier_ParseComment(HalmosVerifier* vrf);
 
+HalmosError HalmosVerifier_ParseConstants(HalmosVerifier* vrf);
 // HalmosError HalmosVerifier_ParseBlock(HalmosVerifier* vrf, HalmosReader* r);
 
 #endif

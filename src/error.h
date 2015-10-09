@@ -19,7 +19,8 @@ enum HalmosError {
   HalmosError_UnterminatedStatement,
   HalmosError_ExpectedWhitespace,
   HalmosError_ExpectedEndStatement,
-  HalmosError_ExpectedKeyword,
+  HalmosError_ExpectedNewLine,
+  HalmosError_InvalidSymbolName,
   HalmosError_Max
 };
 typedef enum HalmosError HalmosError;

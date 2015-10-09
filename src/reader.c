@@ -28,6 +28,7 @@ HalmosError HalmosReader_Init(HalmosReader* r)
   r->offset = 0;
   r->skipped = 0;
   r->didSkip = 0;
+  r->last = 0;
   r->err = HalmosError_None;
   return HalmosError_None;
 }
@@ -82,6 +83,7 @@ HalmosError HalmosReader_GetToken(HalmosReader* r, const char* delimiters)
       return HalmosError_None;
     }
     r->tok[i] = c;
+    r->last = c;
   }
   r->tok[HalmosReader_TokenMax - 1] = '\0';
   return r->err = HalmosError_TokenTooBig;
@@ -102,6 +104,7 @@ HalmosReader_SkipExplicit(HalmosReader* r, const char* s, int skipOnMatch)
       r->didSkip = 1;
       break;
     }
+    r->last = c;
   }
   return HalmosError_None;
 }

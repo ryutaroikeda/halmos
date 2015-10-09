@@ -51,13 +51,16 @@ static int Test_HalmosReader_GetToken()
   ut_assert(err == HalmosError_None, "err == %s, expected None",
     HalmosError_String(err));
   ut_assert(strcmp(r.tok, "Where") == 0, "tok == %s, expected Where", r.tok);
+  ut_assert(r.last == 'e', "last == %c, expected e", r.last);
   err = HalmosReader_GetToken(&r, " ,");
   ut_assert(r.err == err, "returned error and .err mismatch");
   ut_assert(err == HalmosError_None, "err == %s, expected None",
     HalmosError_String(err));
   ut_assert(strcmp(r.tok, "Alph") == 0, "tok == %s, expected Alph", r.tok);
+  ut_assert(r.last == 'h', "last == %c, expected h", r.last);
   err = HalmosReader_GetToken(&r, "$");
   ut_assert(r.err == err, "returned error and .err mismatch");
+  ut_assert(r.last == '.', "last == %c, expected '.'", r.last);
   char t[HalmosReader_TokenMax + 2];
   memset(t, 'a', HalmosReader_TokenMax);
   t[HalmosReader_TokenMax] = '@';
@@ -86,6 +89,7 @@ static int Test_HalmosReader_Skip()
     HalmosError_String(err));
   ut_assert(r.didSkip != 0, ".didSkip == 0, expected 1");
   ut_assert(r.skipped == 'r', ".skipped == %c, expected r", r.skipped);
+  ut_assert(r.last == 'e', "last == %c, expected e", r.last);
   c = HalmosReader_Get(&r);
   ut_assert(c == 'r', "get() == %c, expected r", c);
   err =
@@ -94,6 +98,7 @@ static int Test_HalmosReader_Skip()
   ut_assert(r.err == HalmosError_EndOfString, ".err == %s, expected %s",
     HalmosError_String(r.err),
      HalmosError_String(HalmosError_EndOfString));
+  ut_assert(r.last == ';', "last == %c, expected ;", r.last);
   return 0;
 }
 

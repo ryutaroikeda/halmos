@@ -52,12 +52,11 @@ static void* xmalloc(size_t size)
 
 HalmosError HalmosConstant_Init(HalmosConstant* c, const char* symbol)
 {
-  strncpy(c->symbol, symbol, HalmosVerifier_ConstantSymbolMax);
+  strncpy(c->symbol, symbol, HalmosVerifier_ConstantSymbolMax - 1);
   return HalmosError_None;
 }
 
-HalmosError
-HalmosVerifier_Init(HalmosVerifier* vrf, HalmosReader* r,
+HalmosError HalmosVerifier_Init(HalmosVerifier* vrf, HalmosReader* r,
   const HalmosConfiguration* conf)
 {
   vrf->constants = xmalloc(sizeof(HalmosConstant) * conf->constantMax);
@@ -71,7 +70,7 @@ HalmosVerifier_Init(HalmosVerifier* vrf, HalmosReader* r,
   return HalmosError_None;
 }
 
-HalmosError HalmosVerifier_Clean(HalmosVerifier* vrf)
+HalmosError HalmosVerifier_Clear(HalmosVerifier* vrf)
 {
   free(vrf->constants);
   vrf->constants = NULL;
@@ -105,7 +104,7 @@ HalmosError HalmosVerifier_SetError(HalmosVerifier* vrf, HalmosError err)
 HalmosError
 HalmosVerifier_ResizeConstants(HalmosVerifier* vrf, size_t size)
 {
-  void* p = realloc(vrf->constants, size);
+  void* p = realloc(vrf->constants, sizeof(HalmosConstant) * size);
   if (p == NULL) {
     log_fat("realloc failed, size == %ld", size);
     abort();
@@ -123,16 +122,16 @@ HalmosVerifier_AddConstant(HalmosVerifier* vrf, const char* symbol)
     hlog_err(vrf->head, "duplicate declaration of symbol %s", symbol);
     return vrf->err;
   }
-  if (vrf->constantSize >= vrf->constantMax) {
-    size_t size = vrf->constantMax * 2;
-    HalmosVerifier_ResizeConstants(vrf, size);
-  }
   if (strlen(symbol) >= HalmosVerifier_ConstantSymbolMax) {
     HalmosVerifier_SetError(vrf, HalmosError_SymbolTooBig);
     hlog_err(vrf->head,
       "the constant token %s exceeds the limit of %d characters",
       symbol, HalmosVerifier_ConstantSymbolMax);
     return vrf->err;
+  }
+  if (vrf->constantSize >= vrf->constantMax) {
+    size_t size = vrf->constantMax * 2;
+    HalmosVerifier_ResizeConstants(vrf, size);
   }
   HalmosConstant_Init(&vrf->constants[vrf->constantSize], symbol);
   vrf->constantSize++;
@@ -168,13 +167,33 @@ HalmosError HalmosVerifier_ParseComment(HalmosVerifier* vrf)
   return vrf->err;
 }
 
-HalmosError HalmosVerifier_ParseConstant(HalmosVerifier* vrf)
+HalmosError HalmosVerifier_ParseConstants(HalmosVerifier* vrf)
 {
   vrf->err = HalmosError_None;
   HalmosError err;
   while (1) {
     HalmosReader_Skip(vrf->r, whitespace);
     err = HalmosReader_GetToken(vrf->r, whitespace);
+    /* check for end of statement */
+    if (vrf->r->tok[0] == tokBeginKeyword) {
+      size_t len = strlen(vrf->r->tok);
+      if (len <= 1 || (vrf->r->tok[1] != tokEndStatement)) {
+        HalmosVerifier_SetError(vrf, HalmosError_ExpectedEndStatement);
+        hlog_err(vrf->head, "expected . after $ instead of %s", vrf->r->tok);
+        return vrf->err;
+      } else if (len > 2) {
+        HalmosVerifier_SetError(vrf, HalmosError_ExpectedWhitespace);
+        hlog_err(vrf->head, "expected whitespace after $. in %s", vrf->r->tok);
+        return vrf->err;
+      } else if (err != HalmosError_None) {
+        /* len == 2 and end of file without new line */
+        HalmosVerifier_SetError(vrf, HalmosError_ExpectedNewLine);
+        hlog_err(vrf->head, "expected line break after $.");
+        return vrf->err;
+      }
+      break;
+    }
+    /* check for end of file */
     if (err == HalmosError_EndOfString || err == HalmosError_EndOfFile) {
       HalmosVerifier_SetError(vrf, HalmosError_UnterminatedStatement);
       hlog_err(vrf->head, "reached end of file before $.");
@@ -184,19 +203,11 @@ HalmosError HalmosVerifier_ParseConstant(HalmosVerifier* vrf)
       hlog_err(vrf->head, "token %s... too long", vrf->r->tok);
       return vrf->err;
     }
-    /* check for end of constant declarations statement */
-    if (vrf->r->tok[0] == tokBeginKeyword) {
-      if (vrf->r->tok[1] != tokEndStatement) {
-        HalmosVerifier_SetError(vrf, HalmosError_ExpectedEndStatement);
-        hlog_err(vrf->head, "expected $. instead of %s", vrf->r->tok);
-        return vrf->err;
-      } else if (strlen(vrf->r->tok) > 2) {
-        HalmosVerifier_SetError(vrf, HalmosError_ExpectedWhitespace);
-        hlog_err(vrf->head,
-          "expected whitespace after $. in %s", vrf->r->tok);
-        return vrf->err;
-      }
-      break;
+    /* check the symbol name does not contain $ */
+    if (strchr(vrf->r->tok, tokBeginKeyword)) {
+      HalmosVerifier_SetError(vrf, HalmosError_InvalidSymbolName);
+      hlog_err(vrf->head, "the symbol %s contains $", vrf->r->tok);
+      return vrf->err;
     }
     /* add the constant symbol */
     err = HalmosVerifier_AddConstant(vrf, vrf->r->tok);

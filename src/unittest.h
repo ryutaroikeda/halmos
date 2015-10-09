@@ -2,6 +2,7 @@
 #define _HALMOSUNITTEST_H_
 #include "dbg.h"
 #include <stdio.h>
+#include <string.h>
 
 enum {
   ut_message_size = 1024
