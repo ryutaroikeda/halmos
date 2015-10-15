@@ -1,251 +1,229 @@
-#include "dbg.h"
-#include "reader.h"
 #include "verifier.h"
-#include <stdlib.h>
-#include <string.h>
 
-// static const char* stateStrings[] =
-// {
-//   "None",
-//   "Error",
-//   "Inside a comment",
-//   "Expecting whitespace",
-//   "Inside a block"
-// };
+DEFINE_ARRAY(symbol)
+DEFINE_ARRAY(statement)
+DEFINE_ARRAY(frame)
+DEFINE_ARRAY(reader)
 
-static const char* whitespace = " \t\r\f\n";
-
-static const int tokBeginKeyword = '$';
-// static const int tokBeginBlock = '{';
-// static const int tokEndBlock = '}';
-// static const int tokConstant = 'c';
-// static const int tokVariable = 'v';
-// static const int tokFloating = 'f';
-// static const int tokEssential = 'e';
-// static const int tokDisjoint = 'd';
-// static const int tokAxiom = 'a';
-// static const int tokProposition = 'p';
-static const int tokEndStatement = '.';
-// static const int tokBeginProof = '=';
-// static const int tokBeginFile = '[';
-// static const int tokEndFile = ']';
-// static const int tokBeginComment = '(';
-static const int tokEndComment = ')';
-// static const int tokBeginMathMode = '`';
-// static const int tokEndMathMode = '`';
-// static const int tokLabelMode = '~';
-
-// const char* HalmosState_String(HalmosState s)
-// {
-//   return stateStrings[s];
-// }
-
-static void* xmalloc(size_t size)
+void
+symbolInit(struct symbol* sym)
 {
-  void* p = malloc(size);
-  if (!p) {
-    log_fat("Out of memory");
-    abort();
-  }
-  return p;
+  charArrayInit(&sym->sym, 1);
+  sym->type = symType_none;
 }
 
-HalmosError HalmosConstant_Init(HalmosConstant* c, const char* symbol)
+void
+symbolClean(struct symbol* sym)
 {
-  strncpy(c->symbol, symbol, HalmosVerifier_ConstantSymbolMax - 1);
-  return HalmosError_None;
+  charArrayClean(&sym->sym);
 }
 
-HalmosError HalmosVerifier_Init(HalmosVerifier* vrf, HalmosReader* r,
-  const HalmosConfiguration* conf)
+char*
+symbolGetName(struct symbol* sym)
 {
-  vrf->constants = xmalloc(sizeof(HalmosConstant) * conf->constantMax);
-  vrf->constantSize = 0;
-  vrf->constantMax = conf->constantMax;
-  // vrf->variables =
-  // xmalloc(sizeof(HalmosVariable) * )
-  // vrf->ccmp = &HalmosConstant_CmpSymbol;
-  vrf->r = r;
-  vrf->err = HalmosError_None;
-  return HalmosError_None;
+  return sym->sym.vals;
 }
 
-HalmosError HalmosVerifier_Clear(HalmosVerifier* vrf)
+void
+statementInit(struct statement* stmt)
 {
-  free(vrf->constants);
-  vrf->constants = NULL;
-  vrf->constantSize = 0;
-  vrf->constantMax = 0;
-  return HalmosError_None;
+  size_tArrayInit(&stmt->syms, 1);
+  stmt->isMandatory = 0;
 }
 
-int HalmosVerifier_IsFresh(const HalmosVerifier* vrf, const char* symbol)
+void
+statementClean(struct statement* stmt)
+{
+  size_tArrayClean(&stmt->syms);
+}
+
+void
+frameInit(struct frame* frm)
+{
+  size_tArrayInit(&frm->stmts, 1);
+  size_tArrayInit(&frm->disjoint1, 1);
+  size_tArrayInit(&frm->disjoint2, 1);
+}
+
+void
+frameClean(struct frame* frm)
+{
+  size_tArrayClean(&frm->stmts);
+  size_tArrayClean(&frm->disjoint1);
+  size_tArrayClean(&frm->disjoint2);
+}
+
+void
+verifierInit(struct verifier* vrf)
+{
+  readerArrayInit(&vrf->files, 1);
+  symbolArrayInit(&vrf->symbols, 1);
+  statementArrayInit(&vrf->stmts, 1);
+  frameArrayInit(&vrf->frames, 1);
+  vrf->r = NULL;
+}
+
+void
+verifierClean(struct verifier* vrf)
 {
   size_t i;
-  for (i = 0; i < vrf->constantSize; i++) {
-    if (strcmp(vrf->constants[i].symbol, symbol) == 0) {
+  for (i = 0; i < vrf->files.size; i++) {
+    readerClean(&vrf->files.vals[i]);
+  }
+  readerArrayClean(&vrf->files);
+  for (i = 0; i < vrf->symbols.size; i++) {
+    symbolClean(&vrf->symbols.vals[i]);
+  }
+  symbolArrayClean(&vrf->symbols);
+  for (i = 0; i < vrf->stmts.size; i++) {
+    statementClean(&vrf->stmts.vals[i]);
+  }
+  statementArrayClean(&vrf->stmts);
+  for (i = 0; i < vrf->frames.size; i++) {
+    frameClean(&vrf->frames.vals[i]);
+  }
+  frameArrayClean(&vrf->frames);
+}
+static const char tokBeginKeyword = '$';
+static const char tokEndStatement = '.';
+static const char whitespace[] = " \t\r\f\n";
+
+void
+verifierSetError(struct verifier* vrf, enum error err)
+{
+  vrf->err = err;
+  /* to do: add vrf->errorsum for more details on the error */
+}
+
+int
+verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
+{
+  size_t i;
+  for (i = 0; i < vrf->symbols.size; i++) {
+    if (strcmp(symbolGetName(&vrf->symbols.vals[i]), sym) == 0) {
+      verifierSetError(vrf, error_duplicateSymbol);
       return 0;
     }
   }
-  /* to do: check symbols in vrf->variables */
   return 1;
 }
 
-HalmosError HalmosVerifier_SetError(HalmosVerifier* vrf, HalmosError err)
+int
+verifierIsFreshFile(struct verifier* vrf, const char* file)
 {
-  vrf->err = err;
-  vrf->head.err = err;
-  vrf->head.filename = vrf->r->filename;
-  vrf->head.line = vrf->r->line;
-  vrf->head.offset = vrf->r->offset;
-  return HalmosError_None;
-}
-
-HalmosError
-HalmosVerifier_ResizeConstants(HalmosVerifier* vrf, size_t size)
-{
-  void* p = realloc(vrf->constants, sizeof(HalmosConstant) * size);
-  if (p == NULL) {
-    log_fat("realloc failed, size == %ld", size);
-    abort();
-  }
-  vrf->constantMax = size;
-  vrf->constants = p;
-  return HalmosError_None;
-}
-
-HalmosError
-HalmosVerifier_AddConstant(HalmosVerifier* vrf, const char* symbol)
-{
-  if (!HalmosVerifier_IsFresh(vrf, symbol)) {
-    HalmosVerifier_SetError(vrf, HalmosError_DuplicateSymbol);
-    hlog_err(vrf->head, "duplicate declaration of symbol %s", symbol);
-    return vrf->err;
-  }
-  if (strlen(symbol) >= HalmosVerifier_ConstantSymbolMax) {
-    HalmosVerifier_SetError(vrf, HalmosError_SymbolTooBig);
-    hlog_err(vrf->head,
-      "the constant token %s exceeds the limit of %d characters",
-      symbol, HalmosVerifier_ConstantSymbolMax);
-    return vrf->err;
-  }
-  if (vrf->constantSize >= vrf->constantMax) {
-    size_t size = vrf->constantMax * 2;
-    HalmosVerifier_ResizeConstants(vrf, size);
-  }
-  HalmosConstant_Init(&vrf->constants[vrf->constantSize], symbol);
-  vrf->constantSize++;
-  return HalmosError_None;
-}
-
-// HalmosError HalmosVerifier_ParseWhitespace(HalmosVerifier* vrf)
-// {
-//   vrf->err = HalmosError_None;
-//   int c = HalmosReader_Get(vrf->r);
-//   if (!strchr(whitespace, c)) {
-//     HalmosVerifier_SetError(vrf, HalmosError_ExpectedWhitespace);
-//     hlog_err(vrf->head, "Expected whitespace after $(");
-//     return vrf->err;
-//   }
-//   HalmosReader_Skip(vrf->r, whitespace);
-//   return HalmosError_None;
-// }
-
-HalmosError HalmosVerifier_ParseComment(HalmosVerifier* vrf)
-{
-  vrf->err = HalmosError_None;
-  while (vrf->r->err == HalmosError_None) {
-    HalmosReader_Find(vrf->r, "$");
-    /* discard the $ symbol */
-    HalmosReader_Get(vrf->r);
-    if (HalmosReader_Get(vrf->r) == tokEndComment) {
-      return HalmosError_None;
+  size_t i;
+  for (i = 0; i < vrf->files.size; i++) {
+    if (strcmp(readerGetFilename(&vrf->files.vals[i]), file) == 0) {
+      verifierSetError(vrf, error_duplicateFile);
+      return 0;
     }
   }
-  HalmosVerifier_SetError(vrf, HalmosError_UnterminatedComment);
-  hlog_err(vrf->head, "reached end of file before $)");
-  return vrf->err;
+  return 1;
 }
 
-HalmosError HalmosVerifier_ParseConstants(HalmosVerifier* vrf)
+void verifierAddFile(struct verifier* vrf, struct reader* r)
 {
-  vrf->err = HalmosError_None;
-  HalmosError err;
+  if (!verifierIsFreshFile(vrf, readerGetFilename(r))) {
+    LOG_INFO("file %s was already added", readerGetFilename(r));
+    return;
+  }
+  readerArrayAdd(&vrf->files, *r);
+}
+
+void
+verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
+{
+  if (!verifierIsFreshSymbol(vrf, sym)) {
+    LOG_ERR("%s was already used", sym);
+    return;
+  }
+  struct symbol s;
+  symbolInit(&s);
+  charArrayAppend(&s.sym, sym, strlen(sym));
+  charArrayAdd(&s.sym, '\0');
+  s.type = type;
+  symbolArrayAdd(&vrf->symbols, s);
+}
+
+void
+verifierAddConstant(struct verifier* vrf, const char* sym)
+{
+  verifierAddSymbol(vrf, sym, symType_constant);
+}
+
+void
+verifierAddVariable(struct verifier* vrf, const char* sym)
+{
+  verifierAddSymbol(vrf, sym, symType_variable);
+}
+
+void 
+verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement)
+{
+  char* tok;
+  vrf->err = error_none;
+  *isEndOfStatement = 0;
+  readerSkip(vrf->r, whitespace);
+  tok = readerGetToken(vrf->r, whitespace);
+/* check for end of statement */
+  if (tok[0] == tokBeginKeyword) {
+    size_t len = strlen(tok);
+    if (len <= 1 || (tok[1] != tokEndStatement)) {
+      verifierSetError(vrf, error_expectedEndStatement);
+      LOG_ERR("expected . after $ instead of %s", tok);
+      return;
+    } else if (len > 2) {
+      verifierSetError(vrf, error_expectedWhitespace);
+      LOG_ERR("expected whitespace after $. in %s", tok);
+      return;
+    } else if (vrf->r->err != error_none) {
+/* len == 2 and end of file without new line */
+      verifierSetError(vrf, error_expectedNewLine);
+      LOG_ERR("expected line break after $.");
+      return;
+    }
+    *isEndOfStatement = 1;
+    return;
+  }
+/* check for end of file */
+  if (vrf->r->err == error_endOfString || vrf->r->err == error_endOfFile) {
+    verifierSetError(vrf, error_unterminatedStatement);
+    LOG_ERR("reached end of file before $.");
+    return;
+  }
+/* check the symbol name does not contain $ */
+  if (strchr(tok, tokBeginKeyword)) {
+    verifierSetError(vrf, error_invalidSymbolName);
+    LOG_ERR("the symbol %s contains $", tok);
+    return;
+  }
+  return;
+}
+
+void
+verifierParseConstants(struct verifier* vrf)
+{
+  vrf->err = error_none;
+  int isEndOfStatement;
   while (1) {
-    HalmosReader_Skip(vrf->r, whitespace);
-    err = HalmosReader_GetToken(vrf->r, whitespace);
-    /* check for end of statement */
-    if (vrf->r->tok[0] == tokBeginKeyword) {
-      size_t len = strlen(vrf->r->tok);
-      if (len <= 1 || (vrf->r->tok[1] != tokEndStatement)) {
-        HalmosVerifier_SetError(vrf, HalmosError_ExpectedEndStatement);
-        hlog_err(vrf->head, "expected . after $ instead of %s", vrf->r->tok);
-        return vrf->err;
-      } else if (len > 2) {
-        HalmosVerifier_SetError(vrf, HalmosError_ExpectedWhitespace);
-        hlog_err(vrf->head, "expected whitespace after $. in %s", vrf->r->tok);
-        return vrf->err;
-      } else if (err != HalmosError_None) {
-        /* len == 2 and end of file without new line */
-        HalmosVerifier_SetError(vrf, HalmosError_ExpectedNewLine);
-        hlog_err(vrf->head, "expected line break after $.");
-        return vrf->err;
-      }
-      break;
-    }
-    /* check for end of file */
-    if (err == HalmosError_EndOfString || err == HalmosError_EndOfFile) {
-      HalmosVerifier_SetError(vrf, HalmosError_UnterminatedStatement);
-      hlog_err(vrf->head, "reached end of file before $.");
-      return vrf->err;
-    } else if (err == HalmosError_TokenTooBig) {
-      HalmosVerifier_SetError(vrf, err);
-      hlog_err(vrf->head, "token %s... too long", vrf->r->tok);
-      return vrf->err;
-    }
-    /* check the symbol name does not contain $ */
-    if (strchr(vrf->r->tok, tokBeginKeyword)) {
-      HalmosVerifier_SetError(vrf, HalmosError_InvalidSymbolName);
-      hlog_err(vrf->head, "the symbol %s contains $", vrf->r->tok);
-      return vrf->err;
-    }
-    /* add the constant symbol */
-    err = HalmosVerifier_AddConstant(vrf, vrf->r->tok);
-    if (err) { return err; }
+    verifierParseSymbol(vrf, &isEndOfStatement);
+    if (vrf->err) { break; }
+    if (isEndOfStatement) { break; }
+    verifierAddConstant(vrf, vrf->r->tok.vals);
+    if (vrf->err) { break; }
   }
-  return HalmosError_None;
 }
 
-// HalmosError HalmosVerifier_ParseWhitespace(HalmosVerifier* vrf, HalmosReader* r)
-// {
-//   // debug_assert(vrf->state == HalmosState_ExpectingWhitespace,
-//   //   "state is %s, expected %s", HalmosState_String(vrf->state),
-//     // HalmosState_String(HalmosState_ExpectingWhitespace));
-//   vrf->err = HalmosError_None;
-//   int c = HalmosReader_Get(r);
-//   if (!strchr(whitespace, c)) {
-//     // vrf->state = HalmosState_Error;
-//     return vrf->err = HalmosError_ExpectedWhitespace;
-//   }
-//   HalmosReader_Skip(r, whitespace);
-//   // vrf->state = HalmosState_None;
-//   return HalmosError_None;
-// }
-
-// HalmosError HalmosVerifier_ParseStatement(HalmosVerifier* vrf, HalmosReader* r)
-// {
-//   int c = HalmosReader_Get(r);
-
-//   return HalmosError_None;
-// }
-
-// HalmosError HalmosVerifier_ParseBlock(HalmosVerifier* vrf, HalmosReader* r)
-// {
-//   // debug_assert(vrf->state == HalmosState_InsideBlock,
-//   //   "state is %s, expected Inside a block", HalmosState_String(vrf->state));
-//   // vrf->state = HalmosState_ExpectingWhitespace;
-//   HalmosVerifier_ParseWhiteSpace(vrf, r);
-
-// }
-
-
+void
+verifierParseVariables(struct verifier* vrf)
+{
+  vrf->err = error_none;
+  int isEndOfStatement;
+  while (1) {
+    verifierParseSymbol(vrf, &isEndOfStatement);
+    if (vrf->err) { break; }
+    if (isEndOfStatement) { break; }
+    verifierAddVariable(vrf, vrf->r->tok.vals);
+    if (vrf->err) { break; }
+  }
+}

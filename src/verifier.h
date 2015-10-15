@@ -1,83 +1,94 @@
 #ifndef _HALMOSVERIFIER_H_
 #define _HALMOSVERIFIER_H_
-
+#include "array.h"
 #include "error.h"
-#include <stddef.h>
+#include "reader.h"
 
-#define HalmosVerifier_ConstantSymbolMax 256
+struct symbol;
+typedef struct symbol symbol;
+DECLARE_ARRAY(symbol)
+struct statement;
+typedef struct statement statement;
+DECLARE_ARRAY(statement)
+struct frame;
+typedef struct frame frame;
+DECLARE_ARRAY(frame)
+typedef struct reader reader;
+DECLARE_ARRAY(reader)
 
-// enum HalmosFlag
-// {
-//   HalmosFlag_None,
-//   HalmosFlag_Max
-// };
-// typedef enum HalmosFlag HalmosFlag;
-
-// enum HalmosState
-// {
-//   HalmosState_None,
-//   HalmosState_Error,
-//   HalmosState_InsideComment,
-//   HalmosState_ExpectingWhitespace,
-//   HalmosState_InsideBlock,
-//   HalmosState_Size,
-// };
-// typedef enum HalmosState HalmosState;
-
-// const char* HalmosState_String(HalmosState s);
-
-struct HalmosConfiguration
-{
-  size_t constantMax;
+enum symType {
+  symType_none,
+  symType_constant,
+  symType_variable,
+  symType_floating,
+  symType_essential,
+  symType_assertion,
+  symType_provable,
+  symType_size
 };
-typedef struct HalmosConfiguration HalmosConfiguration;
 
-struct HalmosConstant
-{
-  char symbol[HalmosVerifier_ConstantSymbolMax];
-  // uint32_t hash;
+struct symbol {
+  struct charArray sym;
+  enum symType type;
+/* index to verifier->stmts and verifier->frames. Only valid when type is */
+/* floating, essential, assertion, or provable */
+  size_t stmt;
+  size_t frame;
+/* index to verifier->files, which is an array of readers */
+/*  size_t file; */
+/*  size_t line; */
+/*  size_t offset; */
 };
-typedef struct HalmosConstant HalmosConstant;
 
-// typedef int (*HalmosConstantComparator)(HalmosConstant*, HalmosConstant*);
+void symbolInit(struct symbol* sym);
 
-// struct HalmosVariable
-// {
-//   char symbol[HalmosVerifier_SymbolMax];
-// };
-// typedef struct HalmosVariable HalmosVariable;
+void symbolClean(struct symbol* sym);
 
-struct HalmosVerifier
-{
-  size_t warningSize;
-  size_t errorSize;
-  size_t constantSize;
-  // size_t variableSize;
-  size_t constantMax;
-  // size_t variableMax;
-  HalmosConstant* constants;
-  // HalmosVariable* variables;
-  // HalmosState state;
-  // HalmosConstantComparator* ccmp;
-  HalmosReader* r;
-  HalmosError err;
-  HalmosErrorHeader head;
+char* symbolGetName(struct symbol* sym);
+
+struct statement {
+/* indices to verifier->symbols */
+  struct size_tArray syms;
+/* 1 if it is a mandatory hypothesis */
+  int isMandatory;
 };
-typedef struct HalmosVerifier HalmosVerifier;
 
-HalmosError HalmosVerifier_SetError(HalmosVerifier* vrf, HalmosError err);
+void statementInit(struct statement* stmt);
 
-HalmosError
-HalmosVerifier_Init(HalmosVerifier* vrf, HalmosReader* r,
-  const HalmosConfiguration* conf);
+void statementClean(struct statement* stmt);
+/* extended frame */
+struct frame {
+/* indices to verifier->stmts */
+  struct size_tArray stmts;
+/* indices to verifier->symbols */
+  struct size_tArray disjoint1;
+  struct size_tArray disjoint2;
+};
 
-HalmosError HalmosVerifier_Clear(HalmosVerifier* vrf);
+void frameInit(struct frame* frm);
 
-HalmosError HalmosVerifier_AddConstant(HalmosVerifier* vrf, const char* symbol);
+void frameClean(struct frame* frm);
 
-HalmosError HalmosVerifier_ParseComment(HalmosVerifier* vrf);
+struct verifier {
+/* files opened for verification */
+  struct readerArray files;
+  struct symbolArray symbols;
+  struct statementArray stmts;
+  struct frameArray frames;
+/* the file currently being verified */
+  struct reader* r;
+  enum error err;
+};
 
-HalmosError HalmosVerifier_ParseConstants(HalmosVerifier* vrf);
-// HalmosError HalmosVerifier_ParseBlock(HalmosVerifier* vrf, HalmosReader* r);
+void verifierInit(struct verifier* vrf);
 
+void verifierClean(struct verifier* vrf);
+
+void verifierAddFile(struct verifier* vrf, struct reader* r);
+
+void verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement);
+
+void verifierParseConstants(struct verifier* vrf);
+
+void verifierParseVariables(struct verifier* vrf);
 #endif

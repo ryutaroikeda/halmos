@@ -2,63 +2,82 @@
 #include "reader.h"
 #include <string.h>
 
-static int HalmosReader_GetFromString(HalmosReader* r)
+int
+readerGetString(struct reader* r)
 {
   if (*r->stream.s == '\0') {
-    r->err = HalmosError_EndOfString;
+    r->err = error_endOfString;
     return '\0';
   }
   return *(r->stream.s++);
 }
 
-static int HalmosReader_GetFromFile(HalmosReader* r)
+int
+readerGetFile(struct reader* r)
 {
   int c = getc(r->stream.f);
   if (c == EOF) {
-    r->err = HalmosError_EndOfFile;
+    r->err = error_endOfFile;
     return EOF;
   }
   return c;
 }
 
-HalmosError HalmosReader_Init(HalmosReader* r)
+void
+readerInit(struct reader* r)
 {
-  memset(r->tok, 0, HalmosReader_TokenMax);
+  charArrayInit(&r->tok, 256);
+  charArrayInit(&r->filename, 256);
   r->line = 1;
   r->offset = 0;
   r->skipped = 0;
   r->didSkip = 0;
   r->last = 0;
-  r->err = HalmosError_None;
-  return HalmosError_None;
+  r->get = NULL;
+  r->err = error_none;
 }
 
-HalmosError HalmosReader_InitString(HalmosReader* r, const char* s)
+void
+readerInitString(struct reader* r, const char* s)
 {
+  readerInit(r);
   r->stream.s = s;
-  r->get = &HalmosReader_GetFromString;
-  memset(r->filename, 0, HalmosReader_FilenameMax);
-  return HalmosReader_Init(r);
+  r->get = &readerGetString;
 }
 
-HalmosError
-HalmosReader_InitFile(HalmosReader* r, FILE* f, const char* filename)
+/* fix me: don't take FILE* and open the file here */
+void
+readerInitFile(struct reader* r, FILE* f, const char* filename)
 {
+  readerInit(r);
+  charArrayAppend(&r->filename , filename, strlen(filename));
+  charArrayAdd(&r->filename, '\0');
   r->stream.f = f;
-  r->get = &HalmosReader_GetFromFile;
-  strncpy(r->filename, filename, HalmosReader_FilenameMax);
-  return HalmosReader_Init(r);
+  r->get = &readerGetFile;
 }
 
-int HalmosReader_Get(HalmosReader* r)
+void
+readerClean(struct reader* r)
 {
-  int c;
+/* to do: if a file was opened, close it */
+  charArrayClean(&r->tok);
+  charArrayClean(&r->filename);
+}
+
+char*
+readerGetFilename(struct reader* r)
+{
+  return r->filename.vals;
+}
+
+int
+readerGet(struct reader* r)
+{
   if (r->didSkip) {
     r->didSkip = 0;
-    c = r->skipped;
-  } else {
-    c = (*r->get)(r);
+    return r->skipped;
   }
+  int c = (*r->get)(r);
   if (c == '\n') {
     r->line++;
     r->offset = 0;
@@ -68,35 +87,35 @@ int HalmosReader_Get(HalmosReader* r)
   return c;
 }
 
-HalmosError HalmosReader_GetToken(HalmosReader* r, const char* delimiters)
+char*
+readerGetToken(struct reader* r, const char* delimiters)
 {
-  int i;
-  r->err = HalmosError_None;
-  for (i = 0; i < HalmosReader_TokenMax; i++) {
-    int c = HalmosReader_Get(r);
-    if (r->err != HalmosError_None) {
-      r->tok[i] = '\0';
-      return r->err;
+  r->err = error_none;
+  charArrayEmpty(&r->tok);
+  while (1) {
+    int c = readerGet(r);
+    if (r->err != error_none) {
+      charArrayAdd(&r->tok, '\0');
+      break;
     }
     if (strchr(delimiters, c)) {
-      r->tok[i] = '\0';
-      return HalmosError_None;
+      charArrayAdd(&r->tok, '\0');
+      break;
     }
-    r->tok[i] = c;
+    charArrayAdd(&r->tok, c);
     r->last = c;
   }
-  r->tok[HalmosReader_TokenMax - 1] = '\0';
-  return r->err = HalmosError_TokenTooBig;
+  return r->tok.vals;
 }
 
-HalmosError
-HalmosReader_SkipExplicit(HalmosReader* r, const char* s, int skipOnMatch)
+void
+readerSkipExplicit(struct reader* r, const char* s, int skipOnMatch)
 {
-  r->err = HalmosError_None;
+  r->err = error_none;
   while (1) {
-    int c = HalmosReader_Get(r);
-    if (r->err != HalmosError_None) {
-      return r->err;
+    int c = readerGet(r);
+    if (r->err != error_none) {
+      break;
     }
     char* isMatch = strchr(s, c);
     if ((isMatch && !skipOnMatch) || (!isMatch && skipOnMatch)) {
@@ -106,15 +125,16 @@ HalmosReader_SkipExplicit(HalmosReader* r, const char* s, int skipOnMatch)
     }
     r->last = c;
   }
-  return HalmosError_None;
 }
 
-HalmosError HalmosReader_Skip(HalmosReader* r, const char* skip)
+void
+readerSkip(struct reader* r, const char* skip)
 {
-  return HalmosReader_SkipExplicit(r, skip, 1);
+  readerSkipExplicit(r, skip, 1);
 }
 
-HalmosError HalmosReader_Find(HalmosReader* r, const char* find)
+void
+readerFind(struct reader* r, const char* find)
 {
-  return HalmosReader_SkipExplicit(r, find, 0);
+  readerSkipExplicit(r, find, 0);
 }

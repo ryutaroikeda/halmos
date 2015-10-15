@@ -51,7 +51,7 @@ valgrind:
 	VALGRIND="valgrind --log-file=/tmp/valgrind-%p.log" $(MAKE)
 
 clean:
-	rm -rf build $(OBJECTS) $(TESTS) $(DEPENDENCIES)
+	rm -rf $(OBJECTS) $(TESTOBJECT) $(DEPENDENCIES)
 	rm -f tests/tests.log
 
 ifeq (,$(filter $(MAKECMDGOALS),clean))

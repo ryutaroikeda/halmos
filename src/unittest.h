@@ -15,7 +15,7 @@ char ut_message[ut_message_size];
 #define ut_assert(test, ...) \
 do { \
   if (!(test)) { \
-    log_err(__VA_ARGS__); \
+    LOG_ERR(__VA_ARGS__); \
     snprintf(ut_message, ut_message_size, __VA_ARGS__); \
     return 1; \
   } \
@@ -23,7 +23,7 @@ do { \
 
 #define ut_run(test) \
 do { \
-  debug("\n-----%s", " " #test); \
+  LOG_DEBUG("\n-----%s", " " #test); \
   int result = test(); \
   ut_tests_run++; \
   if (result) { return result; } \

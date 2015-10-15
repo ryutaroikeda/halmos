@@ -1,47 +1,53 @@
 #ifndef _HALMOSREADER_H_
 #define _HALMOSREADER_H_
-
+#include "array.h"
 #include "error.h"
+#include <stddef.h>
 #include <stdio.h>
 
-struct HalmosReader;
+struct reader;
 
-#define HalmosReader_TokenMax 1024
-#define HalmosReader_FilenameMax 256
+typedef int (*charGetter)(struct reader*);
 
-typedef int (*HalmosCharGetter)(struct HalmosReader*);
-
-struct HalmosReader {
+struct reader {
   union {
     FILE* f;
     const char* s;
   } stream;
-  char tok[HalmosReader_TokenMax];
-  char filename[HalmosReader_FilenameMax];
+  struct charArray tok;
+  struct charArray filename;
   size_t line;
   size_t offset;
   int skipped;
   int didSkip;
   /* the character before a match or EOF with GetToken() and Skip() */
   int last;
-  HalmosCharGetter get;
-  HalmosError err;
+  charGetter get;
+  enum error err;
 };
-typedef struct HalmosReader HalmosReader;
 
-HalmosError HalmosReader_InitString(HalmosReader* r, const char* s);
+void
+readerInitString(struct reader* r, const char* s);
 
-HalmosError 
-HalmosReader_InitFile(HalmosReader* r, FILE* f, const char* filename);
+void
+readerInitFile(struct reader* r, FILE* f, const char* filename);
 
-int HalmosReader_Get(HalmosReader* r);
+void
+readerClean(struct reader* r);
 
-HalmosError HalmosReader_GetToken(HalmosReader* r, const char* delimiters);
-/* Discard until a char not in skip is found. */
-/* The next Get() will return the first such char. */
-HalmosError HalmosReader_Skip(HalmosReader* r, const char* skip);
-/* Discard until a char in find is found. */
-/* The next Get() will return the first such char. */
-HalmosError HalmosReader_Find(HalmosReader* r, const char* find);
+char*
+readerGetFilename(struct reader* r);
+
+int
+readerGet(struct reader* r);
+
+char*
+readerGetToken(struct reader* r, const char* delimiter);
+
+void
+readerSkip(struct reader* r, const char* skip);
+
+void
+readerFind(struct reader* r, const char* find);
 
 #endif

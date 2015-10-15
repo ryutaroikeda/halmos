@@ -1,40 +1,20 @@
 #ifndef _HALMOSERROR_H_
 #define _HALMOSERROR_H_
 
-#include <stddef.h>
-
-enum HalmosError {
-  HalmosError_None,
-  /* HalmosReader */
-  HalmosError_EndOfString,
-  HalmosError_EndOfFile,
-  HalmosError_TokenTooBig,
-  /* HalmosConfig */
-  HalmosError_ConstantMaxZero,
-  /* HalmosVerifier */
-  HalmosError_ReallocFailed,
-  HalmosError_SymbolTooBig,
-  HalmosError_DuplicateSymbol,
-  HalmosError_UnterminatedComment,
-  HalmosError_UnterminatedStatement,
-  HalmosError_ExpectedWhitespace,
-  HalmosError_ExpectedEndStatement,
-  HalmosError_ExpectedNewLine,
-  HalmosError_InvalidSymbolName,
-  HalmosError_Max
+enum error {
+  error_none = 0,
+  error_endOfString,
+  error_endOfFile,
+  error_expectedEndStatement,
+  error_expectedWhitespace,
+  error_expectedNewLine,
+  error_unterminatedStatement,
+  error_invalidSymbolName,
+  error_duplicateSymbol,
+  error_duplicateFile,
+  error_size
 };
-typedef enum HalmosError HalmosError;
 
-const char* HalmosError_String(HalmosError err);
-
-struct HalmosErrorHeader {
-  HalmosError err;
-  char* filename;
-  size_t line;
-  size_t offset;
-};
-typedef struct HalmosErrorHeader HalmosErrorHeader;
-
-HalmosError HalmosErrorHeader_Init(HalmosErrorHeader* head);
+const char* errorString(enum error err);
 
 #endif

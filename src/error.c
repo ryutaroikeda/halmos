@@ -1,36 +1,20 @@
 #include "error.h"
 
-static const char* errorStrings[HalmosError_Max] = {
-  "None",
-  /* HalmosReader */
-  "End of string",
-  "End of file",
-  "Token too big",
-  /* HalmosConfiguration */
-  "ConstantMaxZero",
-  /* HalmosVerifier */
-  "Realloc failed",
-  "Constant symbol too big",
-  "Duplicate symbol",
-  "Unterminated comment",
-  "Unterminated statement",
-  "Expected whitespace after a keyword token",
-  "ExpectedEndStatement",
-  "ExpectedNewLine",
-  "Invalid symbol name",
-  /* */
+static const char* errorStrings[error_size] = {
+  "none",
+  "endOfString",
+  "endOfFile",
+  "expectedEndStatement",
+  "expectedWhitespace",
+  "expectedNewLine",
+  "unterminatedStatement",
+  "invalidSymbolName",
+  "duplicateSymbol",
+  "duplicateFile"
 };
 
-const char* HalmosError_String(HalmosError err)
+const char*
+errorString(enum error err)
 {
   return errorStrings[err];
-}
-
-HalmosError HalmosErrorHeader_Init(HalmosErrorHeader* head)
-{
-  head->err = HalmosError_None;
-  head->filename = NULL;
-  head->line = 0;
-  head->offset = 0;
-  return HalmosError_None;
 }
