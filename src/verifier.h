@@ -86,7 +86,7 @@ void verifierClean(struct verifier* vrf);
 
 void verifierAddFile(struct verifier* vrf, struct reader* r);
 
-void verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement);
+char* verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement);
 
 void verifierParseConstants(struct verifier* vrf);
 

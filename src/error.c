@@ -7,8 +7,11 @@ static const char* errorStrings[error_size] = {
   "expectedEndStatement",
   "expectedWhitespace",
   "expectedNewLine",
+  "expectedConstantSymbol",
+  "expectedVariableSymbol",
   "unterminatedStatement",
-  "invalidSymbolName",
+  "invalidSymbol",
+  "undefinedSymbol",
   "duplicateSymbol",
   "duplicateFile"
 };

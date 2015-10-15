@@ -8,8 +8,11 @@ enum error {
   error_expectedEndStatement,
   error_expectedWhitespace,
   error_expectedNewLine,
+  error_expectedConstantSymbol,
+  error_expectedVariableSymbol,
   error_unterminatedStatement,
-  error_invalidSymbolName,
+  error_invalidSymbol,
+  error_undefinedSymbol,
   error_duplicateSymbol,
   error_duplicateFile,
   error_size

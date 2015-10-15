@@ -90,7 +90,7 @@ Test_verifierParseSymbol(void)
   testfile("forced:", error_unterminatedStatement);
   ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
    isEndOfStatement);
-  testfile("bursts$. ", error_invalidSymbolName);
+  testfile("bursts$. ", error_invalidSymbol);
   ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
    isEndOfStatement);
   testfile("$. ", error_none);

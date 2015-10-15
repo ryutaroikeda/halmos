@@ -95,23 +95,37 @@ verifierSetError(struct verifier* vrf, enum error err)
   /* to do: add vrf->errorsum for more details on the error */
 }
 
+size_t
+verifierGetSymId(struct verifier* vrf, const char* sym)
+{
+  size_t i;
+  vrf->err = error_none;
+  for (i = 0; i < vrf->symbols.size; i++) {
+    if (strcmp(vrf->symbols.vals[i].sym.vals, sym) == 0) {
+      return i;
+    }
+  }
+  verifierSetError(vrf, error_undefinedSymbol);
+  return 0;
+}
+
 int
 verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
 {
-  size_t i;
-  for (i = 0; i < vrf->symbols.size; i++) {
-    if (strcmp(symbolGetName(&vrf->symbols.vals[i]), sym) == 0) {
-      verifierSetError(vrf, error_duplicateSymbol);
-      return 0;
-    }
+  verifierGetSymId(vrf, sym);
+  if (vrf->err == error_undefinedSymbol) {
+    vrf->err = error_none;
+    return 1;
   }
-  return 1;
+  verifierSetError(vrf, error_duplicateSymbol);
+  return 0;
 }
 
 int
 verifierIsFreshFile(struct verifier* vrf, const char* file)
 {
   size_t i;
+  vrf->err = error_none;
   for (i = 0; i < vrf->files.size; i++) {
     if (strcmp(readerGetFilename(&vrf->files.vals[i]), file) == 0) {
       verifierSetError(vrf, error_duplicateFile);
@@ -119,6 +133,33 @@ verifierIsFreshFile(struct verifier* vrf, const char* file)
     }
   }
   return 1;
+}
+
+int
+verifierIsType(struct verifier* vrf, const char* sym, enum symType type)
+{
+  size_t i = verifierGetSymId(vrf, sym);
+  if (vrf->err) { return 0; }
+  enum symType t = vrf->symbols.vals[i].type;
+  if (t == type) { return 1; }
+  if (type == symType_constant) {
+    verifierSetError(vrf, error_expectedConstantSymbol);
+  } else if (type == symType_variable) {
+    verifierSetError(vrf, error_expectedVariableSymbol);
+  }
+  return 0;
+}
+
+int
+verifierIsConstant(struct verifier* vrf, const char* sym)
+{
+  return verifierIsType(vrf, sym, symType_constant);
+}
+
+int
+verifierIsVariable(struct verifier* vrf, const char* sym)
+{
+  return verifierIsType(vrf, sym, symType_variable);
 }
 
 void verifierAddFile(struct verifier* vrf, struct reader* r)
@@ -157,7 +198,7 @@ verifierAddVariable(struct verifier* vrf, const char* sym)
   verifierAddSymbol(vrf, sym, symType_variable);
 }
 
-void 
+char* 
 verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement)
 {
   char* tok;
@@ -171,33 +212,33 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement)
     if (len <= 1 || (tok[1] != tokEndStatement)) {
       verifierSetError(vrf, error_expectedEndStatement);
       LOG_ERR("expected . after $ instead of %s", tok);
-      return;
+      return tok;
     } else if (len > 2) {
       verifierSetError(vrf, error_expectedWhitespace);
       LOG_ERR("expected whitespace after $. in %s", tok);
-      return;
+      return tok;
     } else if (vrf->r->err != error_none) {
 /* len == 2 and end of file without new line */
       verifierSetError(vrf, error_expectedNewLine);
       LOG_ERR("expected line break after $.");
-      return;
+      return tok;
     }
     *isEndOfStatement = 1;
-    return;
+    return tok;
   }
 /* check for end of file */
   if (vrf->r->err == error_endOfString || vrf->r->err == error_endOfFile) {
     verifierSetError(vrf, error_unterminatedStatement);
     LOG_ERR("reached end of file before $.");
-    return;
+    return tok;
   }
 /* check the symbol name does not contain $ */
   if (strchr(tok, tokBeginKeyword)) {
-    verifierSetError(vrf, error_invalidSymbolName);
+    verifierSetError(vrf, error_invalidSymbol);
     LOG_ERR("the symbol %s contains $", tok);
-    return;
+    return tok;
   }
-  return;
+  return tok;
 }
 
 void
@@ -205,11 +246,12 @@ verifierParseConstants(struct verifier* vrf)
 {
   vrf->err = error_none;
   int isEndOfStatement;
+  char* tok;
   while (1) {
-    verifierParseSymbol(vrf, &isEndOfStatement);
+    tok = verifierParseSymbol(vrf, &isEndOfStatement);
     if (vrf->err) { break; }
     if (isEndOfStatement) { break; }
-    verifierAddConstant(vrf, vrf->r->tok.vals);
+    verifierAddConstant(vrf, tok);
     if (vrf->err) { break; }
   }
 }
@@ -219,11 +261,47 @@ verifierParseVariables(struct verifier* vrf)
 {
   vrf->err = error_none;
   int isEndOfStatement;
+  char* tok;
   while (1) {
-    verifierParseSymbol(vrf, &isEndOfStatement);
+    tok = verifierParseSymbol(vrf, &isEndOfStatement);
     if (vrf->err) { break; }
     if (isEndOfStatement) { break; }
-    verifierAddVariable(vrf, vrf->r->tok.vals);
+    verifierAddVariable(vrf, tok);
     if (vrf->err) { break; }
   }
+}
+
+// void verifierParseFloat(struct verifier* vrf)
+// {
+//   vrf->err = error_none;
+//   int isEndOfStatement;
+//   char* tok;
+//   struct statement stmt;
+//   tok = verifierParseSymbol(vrf, &isEndOfStatement);
+//   if (vrf->err) { return; }
+//   if (isEndOfStatement) {
+//     verifierSetError(vrf, error_expectedConstantSymbol);
+//     LOG_ERR("statement ended before constant symbol");
+//     return;
+//   }
+//   if (!verifierIsConstant(vrf, tok)) {
+//     LOG_ERR("%s is not a constant symbol", tok);
+//     return;
+//   }
+
+// }
+
+void
+verifierParseFloat(struct verifier* vrf)
+{
+  vrf->err = error_none;
+  int isEndOfStatement;
+  verifierParseSymbol(vrf, &isEndOfStatement);
+  if (vrf->err) { return; }
+  if (isEndOfStatement) {
+    verifierSetError(vrf, error_expectedConstantSymbol);
+    LOG_ERR("expected constant symbol");
+    return;
+  }
+
 }
