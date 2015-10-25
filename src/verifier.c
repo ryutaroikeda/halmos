@@ -1,8 +1,9 @@
 #include "verifier.h"
 
 DEFINE_ARRAY(symbol)
-DEFINE_ARRAY(statement)
+// DEFINE_ARRAY(statement)
 DEFINE_ARRAY(frame)
+DEFINE_ARRAY(symstring)
 DEFINE_ARRAY(reader)
 
 void
@@ -10,6 +11,11 @@ symbolInit(struct symbol* sym)
 {
   charArrayInit(&sym->sym, 1);
   sym->type = symType_none;
+  sym->isActive = 0;
+  sym->isTyped = 0;
+  sym->scope = 0;
+  sym->stmt = 0;
+  sym->frame = 0;
 }
 
 void
@@ -25,32 +31,19 @@ symbolGetName(struct symbol* sym)
 }
 
 void
-statementInit(struct statement* stmt)
-{
-  size_tArrayInit(&stmt->syms, 1);
-  stmt->isMandatory = 0;
-}
-
-void
-statementClean(struct statement* stmt)
-{
-  size_tArrayClean(&stmt->syms);
-}
-
-void
 frameInit(struct frame* frm)
 {
   size_tArrayInit(&frm->stmts, 1);
-  size_tArrayInit(&frm->disjoint1, 1);
-  size_tArrayInit(&frm->disjoint2, 1);
+  // size_tArrayInit(&frm->disjoint1, 1);
+  // size_tArrayInit(&frm->disjoint2, 1);
 }
 
 void
 frameClean(struct frame* frm)
 {
   size_tArrayClean(&frm->stmts);
-  size_tArrayClean(&frm->disjoint1);
-  size_tArrayClean(&frm->disjoint2);
+  // size_tArrayClean(&frm->disjoint1);
+  // size_tArrayClean(&frm->disjoint2);
 }
 
 void
@@ -58,9 +51,13 @@ verifierInit(struct verifier* vrf)
 {
   readerArrayInit(&vrf->files, 1);
   symbolArrayInit(&vrf->symbols, 1);
-  statementArrayInit(&vrf->stmts, 1);
+  symstringArrayInit(&vrf->stmts, 1);
   frameArrayInit(&vrf->frames, 1);
   vrf->r = NULL;
+  size_tArrayInit(&vrf->scope, 1);
+  symstringArrayInit(&vrf->stack, 1);
+  vrf->rId = 0;
+  vrf->err = error_none;
 }
 
 void
@@ -76,16 +73,20 @@ verifierClean(struct verifier* vrf)
   }
   symbolArrayClean(&vrf->symbols);
   for (i = 0; i < vrf->stmts.size; i++) {
-    statementClean(&vrf->stmts.vals[i]);
+    symstringClean(&vrf->stmts.vals[i]);
   }
-  statementArrayClean(&vrf->stmts);
+  symstringArrayClean(&vrf->stmts);
   for (i = 0; i < vrf->frames.size; i++) {
     frameClean(&vrf->frames.vals[i]);
   }
   frameArrayClean(&vrf->frames);
+  size_tArrayClean(&vrf->scope);
+  symstringArrayClean(&vrf->stack);
 }
-static const char tokBeginKeyword = '$';
-static const char tokEndStatement = '.';
+
+// static const char tokBeginKeyword = '$';
+// static const char tokEndStatement = '.';
+// static const char tokEndComment = ')';
 static const char whitespace[] = " \t\r\f\n";
 
 void
@@ -112,9 +113,12 @@ verifierGetSymId(struct verifier* vrf, const char* sym)
 int
 verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
 {
-  verifierGetSymId(vrf, sym);
+  size_t symId = verifierGetSymId(vrf, sym);
   if (vrf->err == error_undefinedSymbol) {
     vrf->err = error_none;
+    return 1;
+  }
+  if (!vrf->symbols.vals[symId].isActive) {
     return 1;
   }
   verifierSetError(vrf, error_duplicateSymbol);
@@ -136,11 +140,9 @@ verifierIsFreshFile(struct verifier* vrf, const char* file)
 }
 
 int
-verifierIsType(struct verifier* vrf, const char* sym, enum symType type)
+verifierIsType(struct verifier* vrf, size_t symId, enum symType type)
 {
-  size_t i = verifierGetSymId(vrf, sym);
-  if (vrf->err) { return 0; }
-  enum symType t = vrf->symbols.vals[i].type;
+  enum symType t = vrf->symbols.vals[symId].type;
   if (t == type) { return 1; }
   if (type == symType_constant) {
     verifierSetError(vrf, error_expectedConstantSymbol);
@@ -150,19 +152,8 @@ verifierIsType(struct verifier* vrf, const char* sym, enum symType type)
   return 0;
 }
 
-int
-verifierIsConstant(struct verifier* vrf, const char* sym)
-{
-  return verifierIsType(vrf, sym, symType_constant);
-}
-
-int
-verifierIsVariable(struct verifier* vrf, const char* sym)
-{
-  return verifierIsType(vrf, sym, symType_variable);
-}
-
-void verifierAddFile(struct verifier* vrf, struct reader* r)
+void
+verifierAddFile(struct verifier* vrf, struct reader* r)
 {
   if (!verifierIsFreshFile(vrf, readerGetFilename(r))) {
     LOG_INFO("file %s was already added", readerGetFilename(r));
@@ -174,28 +165,96 @@ void verifierAddFile(struct verifier* vrf, struct reader* r)
 void
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
 {
-  if (!verifierIsFreshSymbol(vrf, sym)) {
-    LOG_ERR("%s was already used", sym);
-    return;
-  }
   struct symbol s;
   symbolInit(&s);
   charArrayAppend(&s.sym, sym, strlen(sym));
   charArrayAdd(&s.sym, '\0');
   s.type = type;
+  s.isActive = 1;
+  s.scope = vrf->scope.vals[vrf->rId];
+  s.stmt = vrf->stmts.size;
+  s.frame = vrf->frames.size;
+  s.file = vrf->rId;
+  s.line = vrf->r->line;
+  s.offset = vrf->r->offset;
   symbolArrayAdd(&vrf->symbols, s);
+}
+
+void
+verifierAddStatement(struct verifier* vrf, struct symstring* stmt)
+{
+  symstringArrayAdd(&vrf->stmts, *stmt);
 }
 
 void
 verifierAddConstant(struct verifier* vrf, const char* sym)
 {
+  if (!verifierIsFreshSymbol(vrf, sym)) {
+    LOG_ERR("%s was already used", sym);
+    return;
+  }
   verifierAddSymbol(vrf, sym, symType_constant);
 }
 
 void
 verifierAddVariable(struct verifier* vrf, const char* sym)
 {
+  if (!verifierIsFreshSymbol(vrf, sym)) {
+    LOG_ERR("%s was already used", sym);
+    return;
+  }
   verifierAddSymbol(vrf, sym, symType_variable);
+}
+
+/* deactivate non-global symbols in the given nesting level */
+void
+verifierDeactivateSymbols(struct verifier* vrf, size_t scope)
+{
+  size_t i;
+  for (i = 0; i < vrf->symbols.size; i++) {
+    struct symbol* s = &vrf->symbols.vals[i];
+    if (s->type == symType_constant) {
+      continue;
+    } else if (s->type == symType_assertion) {
+      continue;
+    } else if (s->type == symType_provable) {
+      continue;
+    }
+    if (s->scope == scope) {
+      s->isActive = 0;
+    }
+  }
+}
+
+void
+verifierParseComment(struct verifier* vrf)
+{
+  char* tok;
+  vrf->err = error_none;
+  while (1) {
+    readerFind(vrf->r, "$");
+    if (vrf->r->err) {
+      verifierSetError(vrf, error_unterminatedComment);
+      LOG_ERR("reached end of file before $)");
+      return;
+    }
+    tok = readerGetToken(vrf->r, whitespace);
+    if (vrf->r->err) {
+      verifierSetError(vrf, error_expectedNewLine);
+      LOG_ERR("expected line break in the last line");
+      return;
+    }
+    size_t len = strlen(tok);
+    if (len != 2) { continue; }
+    if (tok[1] == '(') {
+      verifierSetError(vrf, error_unexpectedKeyword);
+      LOG_ERR("nested comments are forbidden");
+      return;
+    }
+    if (tok[1] == ')') {
+      break;
+    }
+  }
 }
 
 char* 
@@ -205,25 +264,32 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement)
   vrf->err = error_none;
   *isEndOfStatement = 0;
   readerSkip(vrf->r, whitespace);
+/* check for end of file */
+  if (vrf->r->err == error_endOfString || vrf->r->err == error_endOfFile) {
+    verifierSetError(vrf, error_unterminatedStatement);
+    LOG_ERR("reached end of file before end of statement");
+    return NULL;
+  }
   tok = readerGetToken(vrf->r, whitespace);
 /* check for end of statement */
-  if (tok[0] == tokBeginKeyword) {
+  if (tok[0] == '$') {
     size_t len = strlen(tok);
-    if (len <= 1 || (tok[1] != tokEndStatement)) {
-      verifierSetError(vrf, error_expectedEndStatement);
-      LOG_ERR("expected . after $ instead of %s", tok);
-      return tok;
-    } else if (len > 2) {
-      verifierSetError(vrf, error_expectedWhitespace);
-      LOG_ERR("expected whitespace after $. in %s", tok);
-      return tok;
-    } else if (vrf->r->err != error_none) {
-/* len == 2 and end of file without new line */
-      verifierSetError(vrf, error_expectedNewLine);
-      LOG_ERR("expected line break after $.");
-      return tok;
+    if (len != 2) {
+      verifierSetError(vrf, error_invalidKeyword);
+      LOG_ERR("%s is not a valid keyword", tok);
     }
-    *isEndOfStatement = 1;
+    if (tok[1] == '.') {
+      *isEndOfStatement = 1;
+    } else if (tok[1] == '=') {
+/* for $p statements */
+      *isEndOfStatement = 1;
+    } else if (tok[1] == '(') {
+      verifierParseComment(vrf);
+      return verifierParseSymbol(vrf, isEndOfStatement);
+    } else {
+      verifierSetError(vrf, error_unexpectedKeyword);
+      LOG_ERR("expected $. $= or $( instead of %s", tok);
+    }
     return tok;
   }
 /* check for end of file */
@@ -233,7 +299,7 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement)
     return tok;
   }
 /* check the symbol name does not contain $ */
-  if (strchr(tok, tokBeginKeyword)) {
+  if (strchr(tok, '$')) {
     verifierSetError(vrf, error_invalidSymbol);
     LOG_ERR("the symbol %s contains $", tok);
     return tok;
@@ -249,10 +315,10 @@ verifierParseConstants(struct verifier* vrf)
   char* tok;
   while (1) {
     tok = verifierParseSymbol(vrf, &isEndOfStatement);
-    if (vrf->err) { break; }
+    if (vrf->err) { return; }
     if (isEndOfStatement) { break; }
     verifierAddConstant(vrf, tok);
-    if (vrf->err) { break; }
+    if (vrf->err) { return; }
   }
 }
 
@@ -264,44 +330,318 @@ verifierParseVariables(struct verifier* vrf)
   char* tok;
   while (1) {
     tok = verifierParseSymbol(vrf, &isEndOfStatement);
-    if (vrf->err) { break; }
+    if (vrf->err) { return; }
     if (isEndOfStatement) { break; }
     verifierAddVariable(vrf, tok);
-    if (vrf->err) { break; }
+    if (vrf->err) { return; }
   }
 }
 
-// void verifierParseFloat(struct verifier* vrf)
-// {
-//   vrf->err = error_none;
-//   int isEndOfStatement;
-//   char* tok;
-//   struct statement stmt;
-//   tok = verifierParseSymbol(vrf, &isEndOfStatement);
-//   if (vrf->err) { return; }
-//   if (isEndOfStatement) {
-//     verifierSetError(vrf, error_expectedConstantSymbol);
-//     LOG_ERR("statement ended before constant symbol");
-//     return;
-//   }
-//   if (!verifierIsConstant(vrf, tok)) {
-//     LOG_ERR("%s is not a constant symbol", tok);
-//     return;
-//   }
-
-// }
-
-void
-verifierParseFloat(struct verifier* vrf)
+void 
+verifierParseFloat(struct verifier* vrf, struct symstring* stmt)
 {
   vrf->err = error_none;
   int isEndOfStatement;
-  verifierParseSymbol(vrf, &isEndOfStatement);
+  char* tok;
+  tok = verifierParseSymbol(vrf, &isEndOfStatement);
   if (vrf->err) { return; }
   if (isEndOfStatement) {
     verifierSetError(vrf, error_expectedConstantSymbol);
-    LOG_ERR("expected constant symbol");
+    LOG_ERR("statement ended before constant symbol");
     return;
   }
+  size_t symId = verifierGetSymId(vrf, tok);
+  if (vrf->err) {
+    LOG_ERR("%s is not defined", tok);
+    return;
+  }
+  if (!verifierIsType(vrf, symId, symType_constant)) {
+    LOG_ERR("%s is not a constant symbol", tok);
+    return;
+  }
+  symstringAdd(stmt, symId);
+  tok = verifierParseSymbol(vrf, &isEndOfStatement);
+  if (vrf->err) { return; }
+  if (isEndOfStatement) {
+    verifierSetError(vrf, error_expectedVariableSymbol);
+    LOG_ERR("statement ended before variable symbol");
+    return;
+  }
+  symId = verifierGetSymId(vrf, tok);
+  if (vrf->err) {
+    LOG_ERR("%s is not defined", tok);
+    return;
+  }
+  if (verifierIsType(vrf, symId, symType_variable)) {
+    LOG_ERR("%s is not a variable symbol", tok);
+    return;
+  }
+  symstringAdd(stmt, symId);
+  vrf->symbols.vals[symId].isTyped = 1;
+}
 
+/* return the symId of a variable or set isEndOfStatement or set vrf->err */
+size_t verifierParseDisjoint(struct verifier* vrf, int* isEndOfStatement)
+{
+  char* tok;
+  vrf->err = error_none;
+  *isEndOfStatement = 0;
+  readerSkip(vrf->r, whitespace);
+  tok = readerGetToken(vrf->r, whitespace);
+  if (strcmp(tok, "$.") == 0) {
+    *isEndOfStatement = 1;
+    return 0;
+  }
+  size_t symId = verifierGetSymId(vrf, tok);
+  if (vrf->err) {
+    LOG_ERR("%s is not defined", tok);
+  } else if (!verifierIsType(vrf, symId, symType_variable)) {
+    verifierSetError(vrf, error_expectedVariableSymbol);
+    LOG_ERR("%s is not a variable symbol", tok);
+  } else if (!vrf->symbols.vals[symId].isTyped) {
+    verifierSetError(vrf, error_untypedVariable);
+    LOG_ERR("%s must be typed with a $f statement", tok);
+  }
+  return symId;
+}
+
+void
+verifierParseDisjoints(struct verifier* vrf)
+{
+  vrf->err = error_none;
+  size_t symId;
+  int isEndOfStatement;
+  struct size_tArray vars;
+  size_tArrayInit(&vars, 2);
+  symId = verifierParseDisjoint(vrf, &isEndOfStatement);
+  size_tArrayAdd(&vars, symId);
+  while (!isEndOfStatement && !vrf->err) {
+    symId = verifierParseDisjoint(vrf, &isEndOfStatement);
+    if (isEndOfStatement) {
+      break;
+    }
+/* add an entry for each pair of disjoint variables */
+    size_t i;
+    for (i = 0; i < vars.size; i++) {
+/* add a symbol for the disjoint pair */
+      verifierAddSymbol(vrf, "", symType_disjoint);
+      struct symstring stmt;
+      symstringInit(&stmt);
+      symstringAdd(&stmt, symId);
+      symstringAdd(&stmt, vars.vals[i]);
+      symstringArrayAdd(&vrf->stmts, stmt);
+    }
+    size_tArrayAdd(&vars, symId);
+  }
+  size_tArrayClean(&vars);
+}
+
+void
+verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
+  struct frame* frm)
+{
+  (void) frm;
+  vrf->err = error_none;
+  char* tok;
+  int isEndOfStatement;
+  size_t symId;
+  tok = verifierParseSymbol(vrf, &isEndOfStatement);
+  if (isEndOfStatement) {
+    verifierSetError(vrf, error_expectedConstantSymbol);
+    LOG_ERR("expected constant symbol before end of statement");
+    return;
+  }
+  symId = verifierGetSymId(vrf, tok);
+  if (vrf->err) {
+    LOG_ERR("%s is not defined", tok);
+    return;
+  }
+  if (!verifierIsType(vrf, symId, symType_constant)) {
+    verifierSetError(vrf, error_expectedConstantSymbol);
+    LOG_ERR("%s is not a constant", tok);
+    return;
+  }
+  symstringAdd(stmt, symId);
+  while (1) {
+    tok = verifierParseSymbol(vrf, &isEndOfStatement);
+    if (vrf->err) { return; }
+    if (isEndOfStatement) { break; }
+    symId = verifierGetSymId(vrf, tok);
+    if (vrf->err) {
+      LOG_ERR("%s is not defined", tok);
+      return;
+    }
+    if (verifierIsType(vrf, symId, symType_variable)) {
+      if (!vrf->symbols.vals[symId].isTyped) {
+        verifierSetError(vrf, error_invalidSymbol);
+        LOG_ERR("%s needs to be typed by $f", tok);
+        return;
+      }
+    }
+    symstringAdd(stmt, symId);
+  }
+}
+
+void
+verifierParseAssertion(struct verifier* vrf, struct symstring* stmt,
+ struct frame* frm)
+{
+  verifierParseStatementContent(vrf, stmt, frm);
+
+}
+
+void
+verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
+{
+  char* tok;
+  vrf->err = error_none;
+  *isEndOfProof = 0;
+  readerSkip(vrf->r, whitespace);
+  tok = readerGetToken(vrf->r, whitespace);
+  if (strcmp(tok, "$.") == 0) {
+    *isEndOfProof = 1;
+    return;
+  }
+  const struct symbol* sym;
+  const struct symstring* stmt;
+  struct symstring entry;
+  symstringInit(&entry);
+  size_t symId;
+  symId = verifierGetSymId(vrf, tok);
+  sym = &vrf->symbols.vals[symId];
+  stmt = &vrf->stmts.vals[sym->stmt];
+/* push float and assertions on the stack */
+  if (sym->type == symType_floating || sym->type == symType_assertion) {
+    symstringAppend(&entry, stmt);
+    symstringArrayAdd(&vrf->stack, entry);
+  }
+/* for theorems, pop 'arguments' and push back the result */
+  else if (sym->type == symType_provable) {
+    struct frame* frm;
+    frm = &vrf->frames.vals[sym->frame];
+
+  }
+
+}
+void
+verifierParseProof(struct verifier* vrf)
+{
+  (void) vrf;
+}
+// void
+// verifierParseProvable(struct verifier* vrf, struct statement* stmt)
+// {
+//   verifierParseStatementContent(vrf, stmt);
+//   /* to do: parse the proof */
+// }
+
+void
+verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
+{
+  vrf->err = error_none;
+  char* tok;
+  char* keyword;
+  enum symType type = symType_none;
+  *isEndOfScope = 0;
+/* the beginning of the statement. Get the label */
+  readerSkip(vrf->r, whitespace);
+  tok = readerGetToken(vrf->r, whitespace);
+/* check if we are at the end of the current scope or the end of file */
+  if (vrf->r->err) {
+    *isEndOfScope = 1;
+/* the file must end with a new line character */
+    if (!strchr("\n\f", vrf->r->last)) {
+      verifierSetError(vrf, error_expectedNewLine);
+      LOG_ERR("expected new line at the end of file");
+    }
+    return;
+  }
+  if (tok[0] == '$') {
+    size_t len = strlen(tok);
+    if (len != 2) {
+      verifierSetError(vrf, error_invalidKeyword);
+      LOG_ERR("%s is not a keyword", tok);
+      return;
+    }
+    if (tok[1] == 'c') {
+      verifierParseConstants(vrf);
+    } else if (tok[1] == 'v') {
+      verifierParseVariables(vrf);
+    } else if (tok[1] == 'd') {
+      verifierParseDisjoints(vrf);
+    } else if (tok[1] == '{') {
+      vrf->scope.vals[vrf->rId]++;
+      verifierParseBlock(vrf);
+    } else if (tok[1] == '}') {
+      *isEndOfScope = 1;
+    } else if (tok[1] == '(') {
+      verifierParseComment(vrf);
+    } else {
+      verifierSetError(vrf, error_unexpectedKeyword);
+      LOG_ERR("expected $c, $v, or $} instead of %s", tok);
+    }
+    return;
+  }
+/* we have a label. Determine the type of statement */
+  readerSkip(vrf->r, whitespace);
+  keyword = readerGetToken(vrf->r, whitespace);
+  if (keyword[0] != '$') {
+    verifierSetError(vrf, error_expectedKeyword);
+    LOG_ERR("expected a keyword after the label %s instead of %s", tok,
+     keyword);
+    return;
+  }
+  size_t len = strlen(keyword);
+  if (len != 2) {
+    verifierSetError(vrf, error_invalidKeyword);
+    LOG_ERR("%s is not a valid keyword", keyword);
+    return;
+  }
+  struct symstring stmt;
+  symstringInit(&stmt);
+  struct frame frm;
+  if (keyword[1] == 'f') {
+    type = symType_floating;
+    verifierParseFloat(vrf, &stmt);
+  } else if (keyword[1] == 'e') {
+    type = symType_essential;
+    verifierParseStatementContent(vrf, &stmt, &frm);
+  } else if (keyword[1] == 'a') {
+    struct frame frm;
+    frameInit(&frm);
+    type = symType_assertion;
+    verifierParseAssertion(vrf, &stmt, &frm);
+  } else if (keyword[1] == 'p') {
+    type = symType_provable;
+    /* to do */
+  }
+  if (vrf->err) {
+    symstringClean(&stmt);
+    return;
+  }
+  if (type == symType_none) {
+    verifierSetError(vrf, error_unexpectedKeyword);
+    LOG_ERR("expected $f, $e, $a, or $p instead of %s", keyword);
+    return;
+  }
+  verifierAddSymbol(vrf, tok, type);
+  symstringArrayAdd(&vrf->stmts, stmt);
+}
+
+void
+verifierParseBlock(struct verifier* vrf)
+{
+  int isEndOfScope;
+  while (1) {
+    verifierParseStatement(vrf, &isEndOfScope);
+    if (vrf->err) {
+      break;
+    }
+    if (isEndOfScope) {
+      vrf->scope.vals[vrf->rId]--;
+      break;
+    }
+  }
+/* deactivate local symbols in the current nesting level */
+  verifierDeactivateSymbols(vrf, vrf->scope.vals[vrf->rId]);
 }

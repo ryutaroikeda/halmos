@@ -38,7 +38,7 @@ do { \
 
 #define DEBUG_ASSERT(test, ...) \
 do { \
-  if (!test) { \
+  if (!(test)) { \
     _LOG("ASSERT FAILED", __VA_ARGS__); \
     abort(); \
   } \

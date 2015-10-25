@@ -4,16 +4,19 @@ static const char* errorStrings[error_size] = {
   "none",
   "endOfString",
   "endOfFile",
-  "expectedEndStatement",
-  "expectedWhitespace",
   "expectedNewLine",
   "expectedConstantSymbol",
   "expectedVariableSymbol",
+  "expectedKeyword",
+  "unexpectedKeyword",
+  "unterminatedComment",
   "unterminatedStatement",
+  "untypedVariable",
   "invalidSymbol",
   "undefinedSymbol",
   "duplicateSymbol",
-  "duplicateFile"
+  "duplicateFile",
+  "invalidKeyword",
 };
 
 const char*

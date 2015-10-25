@@ -4,17 +4,17 @@
 #include "reader.h"
 #include "verifier.h"
 
-static int
-Test_statementInit(void)
-{
-  struct statement stmt;
-  statementInit(&stmt);
-  ut_assert(stmt.syms.size == 0, "size == %lu, expected 0", stmt.syms.size);
-  ut_assert(stmt.isMandatory == 0, "isMandatory == %d, expected 0",
-    stmt.isMandatory);
-  statementClean(&stmt);
-  return 0;
-}
+// static int
+// Test_statementInit(void)
+// {
+//   struct statement stmt;
+//   statementInit(&stmt);
+//   ut_assert(stmt.syms.size == 0, "size == %lu, expected 0", stmt.syms.size);
+//   // ut_assert(stmt.isMandatory == 0, "isMandatory == %d, expected 0",
+//   //   stmt.isMandatory);
+//   statementClean(&stmt);
+//   return 0;
+// }
 
 static int
 Test_frameInit(void)
@@ -39,11 +39,11 @@ Test_verifierInit(void)
   vrf.r = &vrf.files.vals[0];
   ut_assert(vrf.files.size == 1, "files.size == %lu, expected 1",
     vrf.files.size);
-  struct statement stmt;
-  statementInit(&stmt);
-  statementArrayAdd(&vrf.stmts, stmt);
-  ut_assert(vrf.stmts.size == 1, "stmts.size == %lu, expected 1",
-   vrf.stmts.size);
+  // struct statement stmt;
+  // statementInit(&stmt);
+  // statementArrayAdd(&vrf.stmts, stmt);
+  // ut_assert(vrf.stmts.size == 1, "stmts.size == %lu, expected 1",
+   // vrf.stmts.size);
   struct frame frm;
   frameInit(&frm);
   frameArrayAdd(&vrf.frames, frm);
@@ -78,15 +78,15 @@ Test_verifierParseSymbol(void)
     verifierClean(&vrf); \
   } while (0)
 
-  testfile("$$", error_expectedEndStatement);
-  ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
-   isEndOfStatement);
-  testfile("$..", error_expectedWhitespace);
-  ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
-   isEndOfStatement);
-  testfile("$.", error_expectedNewLine);
-  ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
-   isEndOfStatement);
+  // testfile("$$", error_expectedEndStatement);
+  // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
+  //  isEndOfStatement);
+  // testfile("$..", error_expectedWhitespace);
+  // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
+   // isEndOfStatement);
+  // testfile("$.", error_expectedNewLine);
+  // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
+  //  isEndOfStatement);
   testfile("forced:", error_unterminatedStatement);
   ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
    isEndOfStatement);
@@ -159,7 +159,6 @@ Test_verifierParseVariables()
 static int
 all(void)
 {
-  ut_run(Test_statementInit);
   ut_run(Test_frameInit);
   ut_run(Test_verifierInit);
   ut_run(Test_verifierParseSymbol);
