@@ -16,15 +16,15 @@
 //   return 0;
 // }
 
-static int
-Test_frameInit(void)
-{
-  struct frame frm;
-  frameInit(&frm);
-  ut_assert(frm.stmts.size == 0, "size == %lu, expected 0", frm.stmts.size);
-  frameClean(&frm);
-  return 0;
-}
+// static int
+// Test_frameInit(void)
+// {
+//   struct frame frm;
+//   frameInit(&frm);
+//   ut_assert(frm.stmts.size == 0, "size == %lu, expected 0", frm.stmts.size);
+//   frameClean(&frm);
+//   return 0;
+// }
 
 static int
 Test_verifierInit(void)
@@ -44,11 +44,11 @@ Test_verifierInit(void)
   // statementArrayAdd(&vrf.stmts, stmt);
   // ut_assert(vrf.stmts.size == 1, "stmts.size == %lu, expected 1",
    // vrf.stmts.size);
-  struct frame frm;
-  frameInit(&frm);
-  frameArrayAdd(&vrf.frames, frm);
-  ut_assert(vrf.frames.size == 1, "frames.size == %lu, expected 1", 
-   vrf.frames.size);
+  // struct frame frm;
+  // frameInit(&frm);
+  // frameArrayAdd(&vrf.frames, frm);
+  // ut_assert(vrf.frames.size == 1, "frames.size == %lu, expected 1", 
+  //  vrf.frames.size);
   verifierClean(&vrf);
   return 0;
 }
@@ -159,7 +159,7 @@ Test_verifierParseVariables()
 static int
 all(void)
 {
-  ut_run(Test_frameInit);
+  // ut_run(Test_frameInit);
   ut_run(Test_verifierInit);
   ut_run(Test_verifierParseSymbol);
   ut_run(Test_verifierParseConstants);

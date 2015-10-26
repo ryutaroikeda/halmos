@@ -17,6 +17,8 @@ static const char* errorStrings[error_size] = {
   "duplicateSymbol",
   "duplicateFile",
   "invalidKeyword",
+  "stackUnderflow",
+  "mismatchedType"
 };
 
 const char*

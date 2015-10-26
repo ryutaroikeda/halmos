@@ -8,11 +8,6 @@
 struct symbol;
 typedef struct symbol symbol;
 DECLARE_ARRAY(symbol)
-/*
-struct statement;
-typedef struct statement statement;
-DECLARE_ARRAY(statement)
-*/
 struct frame;
 typedef struct frame frame;
 DECLARE_ARRAY(frame)
@@ -68,16 +63,16 @@ void statementInit(struct statement* stmt);
 
 void statementClean(struct statement* stmt);
 
-/* extended frame */
+/* frame */
 struct frame {
-/* indices to verifier->stmts */
+/* indices to verifier->stmts. These are mandatory hypotheses */
   struct size_tArray stmts;
-/* indices to verifier->symbols */
-/* or treat disjoints as statements too? */
-/*
+/* variables used in the hypotheses */
+  // struct size_tArray vars;
+/* indices to verifier->symbols for pairwise disjoint variables */
   struct size_tArray disjoint1;
   struct size_tArray disjoint2;
-*/
+
 };
 
 void frameInit(struct frame* frm);
@@ -92,7 +87,6 @@ struct verifier {
   struct frameArray frames;
 /* reverse polish notation stack for verifying proofs */
   struct symstringArray stack;
-  size_t stackTop;
 /* the file currently being verified */
   struct reader* r;
   /* nesting level for each file */

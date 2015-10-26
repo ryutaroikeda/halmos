@@ -18,6 +18,8 @@ enum error {
   error_duplicateSymbol,
   error_duplicateFile,
   error_invalidKeyword,
+  error_stackUnderflow,
+  error_mismatchedType,
   error_size
 };
 

@@ -1,9 +1,7 @@
 #include "verifier.h"
 
 DEFINE_ARRAY(symbol)
-// DEFINE_ARRAY(statement)
 DEFINE_ARRAY(frame)
-DEFINE_ARRAY(symstring)
 DEFINE_ARRAY(reader)
 
 void
@@ -33,7 +31,8 @@ symbolGetName(struct symbol* sym)
 void
 frameInit(struct frame* frm)
 {
-  size_tArrayInit(&frm->stmts, 1);
+  (void) frm;
+  // size_tArrayInit(&frm->stmts, 1);
   // size_tArrayInit(&frm->disjoint1, 1);
   // size_tArrayInit(&frm->disjoint2, 1);
 }
@@ -41,7 +40,8 @@ frameInit(struct frame* frm)
 void
 frameClean(struct frame* frm)
 {
-  size_tArrayClean(&frm->stmts);
+  (void) frm;
+  // size_tArrayClean(&frm->stmts);
   // size_tArrayClean(&frm->disjoint1);
   // size_tArrayClean(&frm->disjoint2);
 }
@@ -488,6 +488,80 @@ verifierParseAssertion(struct verifier* vrf, struct symstring* stmt,
 {
   verifierParseStatementContent(vrf, stmt, frm);
 
+}
+
+/* push an entry on to the rpn stack */
+void
+verifierPush(struct verifier* vrf, struct symstring* str)
+{
+  symstringArrayAdd(&vrf->stack, *str);
+}
+
+/* pop the top of the stack. The caller must clean the returned symstring */
+struct symstring
+verifierPop(struct verifier* vrf)
+{
+  struct symstring str;
+  vrf->err = error_none;
+  if (vrf->stack.size == 0) {
+    verifierSetError(vrf, error_stackUnderflow);
+    LOG_ERR("stack is empty");
+    return str;
+  }
+  str = vrf->stack.vals[vrf->stack.size - 1];
+  vrf->stack.size--;
+  return str;
+}
+
+/* get substitution for floating to match a. a will be modified */
+void
+verifierUnify(struct verifier* vrf, struct substitution* sub,
+ struct symstring* a, const struct symstring* floating)
+{
+  if (a->vals[0] != floating->vals[0]) {
+    verifierSetError(vrf, error_mismatchedType);
+/* to do: should report details of symbol, not just the symstring */
+    LOG_ERR("type error");
+    return;
+  }
+  symstringDelete(a, 0);
+  substitutionAdd(sub, floating->vals[1], a);
+}
+
+/* use an assertion or a theorem. Pop the appropriate number of entries,  */
+/* type-check, do unification and push the result */
+void
+verifierApplyAssertion(struct verifier* vrf, size_t symId)
+{
+  size_t i;
+  vrf->err = error_none;
+/* pop into this array. The last one out is the first argument */
+  struct symstringArray args;
+  symstringArrayInit(&args, 1);
+  const struct symbol* sym = &vrf->symbols.vals[symId];
+  const struct frame* frm = &vrf->frames.vals[sym->frame];
+  for (i = 0; i < frm->stmts.size; i++) {
+    struct symstring str = verifierPop(vrf);
+    if (vrf->err) { break; }
+    symstringArrayAdd(&args, str);
+  }
+  struct substitution sub;
+  substitutionInit(&sub);
+
+/* build this entry to push */
+  struct symstring res;
+  symstringInit(&res);
+  symstringAppend(&res, &vrf->stmts.vals[sym->stmt]);
+
+/* to do: pop, type-check, unify and substitute, */
+/* check disjoint variables */  
+  symstringArrayAdd(&vrf->stack, res);
+/* clean up */
+  for (i = 0; i < args.size; i++) {
+    symstringClean(&args.vals[i]);
+  }
+  symstringArrayClean(&args);
+  substitutionClean(&sub);
 }
 
 void
