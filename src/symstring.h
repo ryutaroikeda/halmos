@@ -27,6 +27,15 @@ symstringInsert(struct symstring* a, size_t idx, const struct symstring* b);
 void
 symstringDelete(struct symstring* a, size_t idx);
 
+int
+symstringIsEqual(const struct symstring* a, const struct symstring* b);
+
+int
+symstringIsIn(const struct symstring* a, size_t symId);
+
+int
+symstringIsIntersecting(const struct symstring* a, const struct symstring* b);
+
 /* substitute every occurence of s in a by b */
 /* use substitutionSubstitute instead, for doing simultaneous substitutions */
 void

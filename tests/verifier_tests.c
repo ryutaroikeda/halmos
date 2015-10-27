@@ -4,27 +4,15 @@
 #include "reader.h"
 #include "verifier.h"
 
-// static int
-// Test_statementInit(void)
-// {
-//   struct statement stmt;
-//   statementInit(&stmt);
-//   ut_assert(stmt.syms.size == 0, "size == %lu, expected 0", stmt.syms.size);
-//   // ut_assert(stmt.isMandatory == 0, "isMandatory == %d, expected 0",
-//   //   stmt.isMandatory);
-//   statementClean(&stmt);
-//   return 0;
-// }
-
-// static int
-// Test_frameInit(void)
-// {
-//   struct frame frm;
-//   frameInit(&frm);
-//   ut_assert(frm.stmts.size == 0, "size == %lu, expected 0", frm.stmts.size);
-//   frameClean(&frm);
-//   return 0;
-// }
+static int
+Test_frameInit(void)
+{
+  struct frame frm;
+  frameInit(&frm);
+  ut_assert(frm.stmts.size == 0, "size == %lu, expected 0", frm.stmts.size);
+  frameClean(&frm);
+  return 0;
+}
 
 static int
 Test_verifierInit(void)
@@ -157,13 +145,84 @@ Test_verifierParseVariables()
 }
 
 static int
+Test_verifierIsValidDisjointPairSubstitution(void)
+{
+  struct verifier vrf;
+  struct frame frm;
+  struct substitution sub;
+  verifierInit(&vrf);
+  verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 0, 0, 0, 0, 0, 0, 0,
+   0);
+  verifierAddSymbolExplicit(&vrf, "v2", symType_variable, 0, 0, 0, 0, 0, 0, 0,
+   0);
+  verifierAddSymbolExplicit(&vrf, "v3", symType_variable, 0, 0, 0, 0, 0, 0, 0,
+   0);
+  LOG_INFO("added symbol");
+  size_t v1 = verifierGetSymId(&vrf, "v1");
+  size_t v2 = verifierGetSymId(&vrf, "v2");
+  size_t v3 = verifierGetSymId(&vrf, "v3");
+  ut_assert(!vrf.err, "failed to find symbol");
+  frameInit(&frm);
+  frameAddDisjoint(&frm, v1, v2);
+  struct symstring str1, str2;
+  symstringInit(&str1);
+  symstringInit(&str2);
+  symstringAdd(&str1, v3);
+  symstringAdd(&str2, v3);
+  substitutionInit(&sub);
+  substitutionAdd(&sub, v1, &str1);
+  substitutionAdd(&sub, v2, &str2);
+  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
+   "sub should be invalid");
+/* str1 and str2 cleaned here */
+  substitutionClean(&sub);
+  frameClean(&frm);
+  frameInit(&frm);
+  frameAddDisjoint(&frm, v1, v2);
+  symstringInit(&str1);
+  symstringInit(&str2);
+  symstringAdd(&str1, v1);
+  symstringAdd(&str1, v2);
+  symstringAdd(&str2, v3);
+  substitutionInit(&sub);
+  substitutionAdd(&sub, v1, &str1);
+  substitutionAdd(&sub, v2, &str2);
+  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
+    "sub should be invalid");
+  frameAddDisjoint(&frm, v1, v3);
+  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
+    "sub should be invalid");
+  frameAddDisjoint(&frm, v2, v3);
+  ut_assert(verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
+    "sub should be valid");
+  substitutionClean(&sub);
+  frameClean(&frm);
+  verifierClean(&vrf);
+  return 0;
+}
+
+// static int
+// Test_verifierIsValidSubstitution(void)
+// {
+//   struct verifier vrf;
+//   struct substitution sub;
+//   struct frame frm;
+//   size_t v1, v2, v3;
+//   verifierInit(&vrf);
+//   substitutionInit(&sub);
+//   frameInit(&frm);
+
+// }
+
+static int
 all(void)
 {
-  // ut_run(Test_frameInit);
+  ut_run(Test_frameInit);
   ut_run(Test_verifierInit);
   ut_run(Test_verifierParseSymbol);
   ut_run(Test_verifierParseConstants);
   ut_run(Test_verifierParseVariables);
+  ut_run(Test_verifierIsValidDisjointPairSubstitution);
   return 0;
 }
 

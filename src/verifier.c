@@ -31,19 +31,39 @@ symbolGetName(struct symbol* sym)
 void
 frameInit(struct frame* frm)
 {
-  (void) frm;
-  // size_tArrayInit(&frm->stmts, 1);
-  // size_tArrayInit(&frm->disjoint1, 1);
-  // size_tArrayInit(&frm->disjoint2, 1);
+  size_tArrayInit(&frm->stmts, 1);
+  size_tArrayInit(&frm->disjoint1, 1);
+  size_tArrayInit(&frm->disjoint2, 1);
 }
 
 void
 frameClean(struct frame* frm)
 {
-  (void) frm;
-  // size_tArrayClean(&frm->stmts);
-  // size_tArrayClean(&frm->disjoint1);
-  // size_tArrayClean(&frm->disjoint2);
+  size_tArrayClean(&frm->disjoint2);
+  size_tArrayClean(&frm->disjoint1);
+  size_tArrayClean(&frm->stmts);
+}
+
+int
+frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2)
+{
+  size_t i;
+  for (i = 0; i < frm->disjoint1.size; i++) {
+    if ((frm->disjoint1.vals[i] == v1) && (frm->disjoint2.vals[i] == v2)) {
+      return 1;
+    }
+    if ((frm->disjoint1.vals[i] == v2) && (frm->disjoint2.vals[i] == v1)) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void
+frameAddDisjoint(struct frame* frm, size_t v1, size_t v2)
+{
+  size_tArrayAdd(&frm->disjoint1, v1);
+  size_tArrayAdd(&frm->disjoint2, v2);
 }
 
 void
@@ -53,9 +73,9 @@ verifierInit(struct verifier* vrf)
   symbolArrayInit(&vrf->symbols, 1);
   symstringArrayInit(&vrf->stmts, 1);
   frameArrayInit(&vrf->frames, 1);
-  vrf->r = NULL;
   size_tArrayInit(&vrf->scope, 1);
   symstringArrayInit(&vrf->stack, 1);
+  vrf->r = NULL;
   vrf->rId = 0;
   vrf->err = error_none;
 }
@@ -64,24 +84,25 @@ void
 verifierClean(struct verifier* vrf)
 {
   size_t i;
-  for (i = 0; i < vrf->files.size; i++) {
-    readerClean(&vrf->files.vals[i]);
-  }
-  readerArrayClean(&vrf->files);
-  for (i = 0; i < vrf->symbols.size; i++) {
-    symbolClean(&vrf->symbols.vals[i]);
-  }
-  symbolArrayClean(&vrf->symbols);
-  for (i = 0; i < vrf->stmts.size; i++) {
-    symstringClean(&vrf->stmts.vals[i]);
-  }
-  symstringArrayClean(&vrf->stmts);
+  symstringArrayClean(&vrf->stack);
+  size_tArrayClean(&vrf->scope);
   for (i = 0; i < vrf->frames.size; i++) {
     frameClean(&vrf->frames.vals[i]);
   }
   frameArrayClean(&vrf->frames);
-  size_tArrayClean(&vrf->scope);
-  symstringArrayClean(&vrf->stack);
+  for (i = 0; i < vrf->stmts.size; i++) {
+    symstringClean(&vrf->stmts.vals[i]);
+  }
+  symstringArrayClean(&vrf->stmts);
+  for (i = 0; i < vrf->symbols.size; i++) {
+    symbolClean(&vrf->symbols.vals[i]);
+  }
+  symbolArrayClean(&vrf->symbols);
+  for (i = 0; i < vrf->files.size; i++) {
+    readerClean(&vrf->files.vals[i]);
+  }
+  readerArrayClean(&vrf->files);
+  vrf->r = NULL;
 }
 
 // static const char tokBeginKeyword = '$';
@@ -108,6 +129,12 @@ verifierGetSymId(struct verifier* vrf, const char* sym)
   }
   verifierSetError(vrf, error_undefinedSymbol);
   return 0;
+}
+
+const char*
+verifierGetSymName(const struct verifier* vrf, size_t symId)
+{
+  return vrf->symbols.vals[symId].sym.vals;
 }
 
 int
@@ -148,6 +175,8 @@ verifierIsType(struct verifier* vrf, size_t symId, enum symType type)
     verifierSetError(vrf, error_expectedConstantSymbol);
   } else if (type == symType_variable) {
     verifierSetError(vrf, error_expectedVariableSymbol);
+  } else if (type == symType_floating) {
+    verifierSetError(vrf, error_expectedFloatingSymbol);
   }
   return 0;
 }
@@ -160,24 +189,35 @@ verifierAddFile(struct verifier* vrf, struct reader* r)
     return;
   }
   readerArrayAdd(&vrf->files, *r);
+  size_tArrayAdd(&vrf->scope, 0);
 }
 
 void
-verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
+verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
+ enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
+ size_t frame, size_t file, size_t line, size_t offset)
 {
   struct symbol s;
   symbolInit(&s);
   charArrayAppend(&s.sym, sym, strlen(sym));
   charArrayAdd(&s.sym, '\0');
   s.type = type;
-  s.isActive = 1;
-  s.scope = vrf->scope.vals[vrf->rId];
-  s.stmt = vrf->stmts.size;
-  s.frame = vrf->frames.size;
-  s.file = vrf->rId;
-  s.line = vrf->r->line;
-  s.offset = vrf->r->offset;
+  s.isActive = isActive;
+  s.isTyped = isTyped;
+  s.scope = scope;
+  s.stmt = stmt;
+  s.frame = frame;
+  s.file = file;
+  s.line = line;
+  s.offset = offset;
   symbolArrayAdd(&vrf->symbols, s);
+}
+
+void
+verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
+{
+  verifierAddSymbolExplicit(vrf, sym, type, 1, 0, vrf->scope.vals[vrf->rId],
+    vrf->stmts.size, vrf->frames.size, vrf->rId, vrf->r->line, vrf->r->offset);
 }
 
 void
@@ -490,14 +530,97 @@ verifierParseAssertion(struct verifier* vrf, struct symstring* stmt,
 
 }
 
-/* push an entry on to the rpn stack */
+/* get the set of variables in str */
 void
-verifierPush(struct verifier* vrf, struct symstring* str)
+verifierGetVariables(struct verifier* vrf, struct symstring* set, 
+  const struct symstring* str)
 {
-  symstringArrayAdd(&vrf->stack, *str);
+  vrf->err = error_none;
+  size_t i;
+  for (i = 0; i < str->size; i++) {
+    size_t sym = str->vals[i];
+    DEBUG_ASSERT(sym < vrf->symbols.size, "invalid symId %lu, size is %lu",
+      sym, vrf->symbols.size);
+    if (vrf->symbols.vals[sym].type != symType_variable) { continue; }
+    if (symstringIsIn(set, sym)) { continue; }
+    symstringAdd(set, sym);
+  }
 }
 
-/* pop the top of the stack. The caller must clean the returned symstring */
+/* v1 and v2 are indices into sub->vars */
+int
+verifierIsValidDisjointPairSubstitution(struct verifier* vrf, 
+  const struct frame* frm, const struct substitution* sub, size_t v1,
+   size_t v2)
+{
+  vrf->err = error_none;
+  DEBUG_ASSERT(sub->vars.size == sub->subs.size, "invalid substitution");
+  DEBUG_ASSERT(v1 < sub->vars.size, "invalid variable index to substitution");
+  DEBUG_ASSERT(v2 < sub->vars.size, "invalid variable index to substitution");
+  size_t varId1 = sub->vars.vals[v1];
+  size_t varId2 = sub->vars.vals[v2];
+  DEBUG_ASSERT(varId1 < vrf->symbols.size, "invalid varId %lu", varId1);
+  DEBUG_ASSERT(varId2 < vrf->symbols.size, "invalid varId %lu", varId2);
+  DEBUG_ASSERT(frameAreDisjoint(frm, varId1, varId2),
+    "%s and %s are not disjoint", verifierGetSymName(vrf, varId1),
+    verifierGetSymName(vrf, varId2));
+  struct symstring s1, s2;
+  symstringInit(&s1);
+  symstringInit(&s2);
+/* check the substitution has no common variables */
+  verifierGetVariables(vrf, &s1, &sub->subs.vals[v1]);
+  verifierGetVariables(vrf, &s2, &sub->subs.vals[v2]);
+  if (symstringIsIntersecting(&s1, &s2)) { 
+    verifierSetError(vrf, error_invalidSubstitutionOfDisjoint);
+/* to do: pretty-print the intersecting set */
+    LOG_ERR("disjoint variables %s and %s share a variable in their " 
+      "substitutions", verifierGetSymName(vrf, varId1), 
+      verifierGetSymName(vrf, varId2));
+  }
+/* check each pair of variables from s1 and s2 have the disjoint variable */
+/* restriction on them */
+  size_t i, j;
+  for (i = 0; i < s1.size; i++) {
+    if (vrf->err) { break; }
+    for (j = 0; j < s2.size; j++) {
+      if (!frameAreDisjoint(frm, s1.vals[i], s2.vals[j])) {
+        verifierSetError(vrf, error_missingDisjointRestriction);
+        LOG_ERR("the variables %s and %s should be disjoint", 
+          verifierGetSymName(vrf, s1.vals[i]),
+          verifierGetSymName(vrf, s2.vals[j]));
+        break;
+      }
+    }
+  }
+/* clean up */
+  symstringClean(&s2);
+  symstringClean(&s1);
+  return !(vrf->err);
+}
+
+/* ensure that the substitution respects the disjoint-variable restriction */
+int
+verifierIsValidSubstitution(struct verifier* vrf, const struct frame* frm,
+  const struct substitution* sub)
+{
+  vrf->err = error_none;
+  if (sub->vars.size == 0) { return 1; }
+  size_t i, j;
+  for (i = 0; i < sub->vars.size - 1; i++) {
+    for (j = i + 1; j < sub->vars.size; j++) {
+      if (!frameAreDisjoint(frm, sub->vars.vals[i], sub->vars.vals[j])) { 
+        continue;
+      }
+      if (!verifierIsValidDisjointPairSubstitution(vrf, frm, sub, i, j)) {
+        return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+/* pop the top of the stack. The caller is responsible for cleaning the */
+/* returned symstring */
 struct symstring
 verifierPop(struct verifier* vrf)
 {
@@ -524,6 +647,7 @@ verifierUnify(struct verifier* vrf, struct substitution* sub,
     LOG_ERR("type error");
     return;
   }
+/* get rid of the first constant symbol (the type symbol) */
   symstringDelete(a, 0);
   substitutionAdd(sub, floating->vals[1], a);
 }
@@ -535,33 +659,69 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
 {
   size_t i;
   vrf->err = error_none;
-/* pop into this array. The last one out is the first argument */
-  struct symstringArray args;
-  symstringArrayInit(&args, 1);
   const struct symbol* sym = &vrf->symbols.vals[symId];
   const struct frame* frm = &vrf->frames.vals[sym->frame];
-  for (i = 0; i < frm->stmts.size; i++) {
+  const size_t argc = frm->stmts.size;
+/* we pop into this array. The last one out is the first argument to the */
+/* assertion. */
+  struct symstringArray args;
+  symstringArrayInit(&args, argc);
+  for (i = 0; i < argc; i++) {
     struct symstring str = verifierPop(vrf);
     if (vrf->err) { break; }
     symstringArrayAdd(&args, str);
   }
+/* get the patterns to match with the arguments. */
+  struct symstringArray pats;
+  symstringArrayInit(&pats, 1);
+  for (i = 0; i < argc; i++) {
+    struct symstring str;
+    symstringInit(&str);
+    symstringAppend(&str, &vrf->stmts.vals[frm->stmts.vals[i]]);
+    symstringArrayAdd(&pats, str);
+  }
+/* create the substitution by unifying $f statements */
   struct substitution sub;
   substitutionInit(&sub);
-
-/* build this entry to push */
+  for (i = 0; i < args.size; i++) {
+    if (!verifierIsType(vrf, frm->stmts.vals[i], symType_floating)) {
+      continue;
+    }
+/* reverse the order of args and unify */
+    verifierUnify(vrf, &sub, &args.vals[args.size - 1 - i], &pats.vals[i]);
+  }
+/* check that the disjoint-variable restrictions are satisfied. If invalid, */
+/* vrf->err will be set */
+  verifierIsValidSubstitution(vrf, frm, &sub);
+/* apply the substitution to $e hypotheses and check if they match the args */
+  for (i = 0; i < args.size; i++) {
+    if (vrf->err) { break; }
+    if (!verifierIsType(vrf, frm->stmts.vals[i], symType_essential)) {
+      continue;
+    }
+    substitutionApply(&sub, &pats.vals[i]);
+    if (!symstringIsEqual(&args.vals[i], &pats.vals[i])) {
+      verifierSetError(vrf, error_mismatchedEssentialHypothesis);
+  /* to do: add logging for symstrings */
+      LOG_ERR("the argument does not match the hypothesis");
+    }
+  }
+/* build the result to push */
   struct symstring res;
   symstringInit(&res);
   symstringAppend(&res, &vrf->stmts.vals[sym->stmt]);
-
-/* to do: pop, type-check, unify and substitute, */
-/* check disjoint variables */  
+  substitutionApply(&sub, &res);
   symstringArrayAdd(&vrf->stack, res);
 /* clean up */
+  substitutionClean(&sub);
+  for (i = 0; i < pats.size; i++) {
+    symstringClean(&pats.vals[i]);
+  }
+  symstringArrayClean(&pats);
   for (i = 0; i < args.size; i++) {
     symstringClean(&args.vals[i]);
   }
   symstringArrayClean(&args);
-  substitutionClean(&sub);
 }
 
 void

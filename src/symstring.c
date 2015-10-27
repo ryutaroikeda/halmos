@@ -81,6 +81,37 @@ symstringSubstitute(struct symstring* a, size_t s, const struct symstring* b)
   }
 }
 
+int
+symstringIsEqual(const struct symstring* a, const struct symstring* b)
+{
+  size_t i;
+  if (a->size != b->size) { return 0; }
+  for (i = 0; i < a->size; i++) {
+    if (a->vals[i] != b->vals[i]) { return 0; }
+  }
+  return 1;
+}
+
+int
+symstringIsIn(const struct symstring* a, size_t sym)
+{
+  size_t i;
+  for (i = 0; i < a->size; i++) {
+    if (a->vals[i] == sym) { return 1; }
+  }
+  return 0;
+}
+
+int
+symstringIsIntersecting(const struct symstring* a, const struct symstring* b)
+{
+  size_t i;
+  for (i = 0; i < a->size; i++) {
+    if (symstringIsIn(b, a->vals[i])) { return 1; }
+  }
+  return 0;
+}
+
 void
 substitutionInit(struct substitution* sub)
 {
@@ -93,11 +124,11 @@ void
 substitutionClean(struct substitution* sub)
 {
   size_t i;
-  size_tArrayClean(&sub->vars);
   for (i = 0; i < sub->subs.size; i++) {
     symstringClean(&sub->subs.vals[i]);
   }
   symstringArrayClean(&sub->subs);
+  size_tArrayClean(&sub->vars);
 }
 
 void

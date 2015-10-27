@@ -51,33 +51,40 @@ void symbolClean(struct symbol* sym);
 
 char* symbolGetName(struct symbol* sym);
 
-struct statement {
+// struct statement {
 /* indices to verifier->symbols */
-  struct symstring syms;
+  // struct symstring syms;
 /* 1 if it is a mandatory hypothesis */
 /* fix me: how does this work? This should be in frame */
 /* int isMandatory; */
-};
+// };
 
-void statementInit(struct statement* stmt);
+// void statementInit(struct statement* stmt);
 
-void statementClean(struct statement* stmt);
+// void statementClean(struct statement* stmt);
 
 /* frame */
 struct frame {
 /* indices to verifier->stmts. These are mandatory hypotheses */
   struct size_tArray stmts;
-/* variables used in the hypotheses */
-  // struct size_tArray vars;
 /* indices to verifier->symbols for pairwise disjoint variables */
   struct size_tArray disjoint1;
   struct size_tArray disjoint2;
 
 };
 
-void frameInit(struct frame* frm);
+void
+frameInit(struct frame* frm);
 
-void frameClean(struct frame* frm);
+void
+frameClean(struct frame* frm);
+
+void
+frameAddDisjoint(struct frame* frm, size_t v1, size_t v2);
+
+int
+frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2);
+
 
 struct verifier {
 /* files opened for verification */
@@ -89,9 +96,9 @@ struct verifier {
   struct symstringArray stack;
 /* the file currently being verified */
   struct reader* r;
-  /* nesting level for each file */
+/* nesting level for each file */
   struct size_tArray scope;
-  /* index of the current file */
+/* index of the current file */
   size_t rId;
   enum error err;
 };
@@ -102,8 +109,19 @@ verifierInit(struct verifier* vrf);
 void
 verifierClean(struct verifier* vrf);
 
+size_t
+verifierGetSymId(struct verifier* vrf, const char* sym);
+
 void
 verifierAddFile(struct verifier* vrf, struct reader* r);
+
+void
+verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
+ enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
+ size_t frame, size_t file, size_t line, size_t offset);
+
+void
+verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type);
 
 char*
 verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement);
@@ -116,6 +134,11 @@ verifierParseVariables(struct verifier* vrf);
 /* stmt must be initialized */
 void
 verifierParseFloat(struct verifier* vrf, struct symstring* stmt);
+
+int
+verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
+ const struct frame* frm, const struct substitution* sub, size_t v1,
+ size_t v2);
 
 void
 verifierParseBlock(struct verifier* vrf);

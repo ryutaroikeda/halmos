@@ -8,6 +8,7 @@ enum error {
   error_expectedNewLine,
   error_expectedConstantSymbol,
   error_expectedVariableSymbol,
+  error_expectedFloatingSymbol,
   error_expectedKeyword,
   error_unexpectedKeyword,
   error_unterminatedComment,
@@ -20,6 +21,9 @@ enum error {
   error_invalidKeyword,
   error_stackUnderflow,
   error_mismatchedType,
+  error_mismatchedEssentialHypothesis,
+  error_invalidSubstitutionOfDisjoint,
+  error_missingDisjointRestriction,
   error_size
 };
 

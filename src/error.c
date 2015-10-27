@@ -7,6 +7,7 @@ static const char* errorStrings[error_size] = {
   "expectedNewLine",
   "expectedConstantSymbol",
   "expectedVariableSymbol",
+  "expectedFloatingSymbol",
   "expectedKeyword",
   "unexpectedKeyword",
   "unterminatedComment",
@@ -18,7 +19,10 @@ static const char* errorStrings[error_size] = {
   "duplicateFile",
   "invalidKeyword",
   "stackUnderflow",
-  "mismatchedType"
+  "mismatchedType",
+  "mismatchedEssentialHypothesis",
+  "invalidSubstitutionOfDisjoint",
+  "missingDisjointRestriction"
 };
 
 const char*
