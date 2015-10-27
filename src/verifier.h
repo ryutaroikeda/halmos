@@ -140,6 +140,10 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
  const struct frame* frm, const struct substitution* sub, size_t v1,
  size_t v2);
 
+int
+verifierIsValidSubstitution(struct verifier* vrf, const struct frame* frm,
+  const struct substitution* sub);
+  
 void
 verifierParseBlock(struct verifier* vrf);
 #endif

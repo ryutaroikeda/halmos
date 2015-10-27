@@ -164,6 +164,7 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   ut_assert(!vrf.err, "failed to find symbol");
   frameInit(&frm);
   frameAddDisjoint(&frm, v1, v2);
+/* build the substitution */
   struct symstring str1, str2;
   symstringInit(&str1);
   symstringInit(&str2);
@@ -201,18 +202,47 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   return 0;
 }
 
-// static int
-// Test_verifierIsValidSubstitution(void)
-// {
-//   struct verifier vrf;
-//   struct substitution sub;
-//   struct frame frm;
-//   size_t v1, v2, v3;
-//   verifierInit(&vrf);
-//   substitutionInit(&sub);
-//   frameInit(&frm);
-
-// }
+static int
+Test_verifierIsValidSubstitution(void)
+{
+  struct verifier vrf;
+  struct substitution sub;
+  struct frame frm;
+  size_t v1, v2, v3;
+  verifierInit(&vrf);
+  verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 0, 0, 0, 0, 0, 0, 0,
+   0);
+  verifierAddSymbolExplicit(&vrf, "v2", symType_variable, 0, 0, 0, 0, 0, 0, 0,
+   0);
+  verifierAddSymbolExplicit(&vrf, "v3", symType_variable, 0, 0, 0, 0, 0, 0, 0,
+   0);
+  v1 = verifierGetSymId(&vrf, "v1");
+  v2 = verifierGetSymId(&vrf, "v2");
+  v3 = verifierGetSymId(&vrf, "v3");
+  frameInit(&frm);
+/* build the substitution */
+  struct symstring str1, str2, str3;
+  symstringInit(&str1);
+  symstringInit(&str2);
+  symstringInit(&str3);
+  symstringAdd(&str1, v1);
+  symstringAdd(&str2, v1);
+  symstringAdd(&str3, v3);
+  substitutionInit(&sub);
+  substitutionAdd(&sub, v1, &str1);
+  substitutionAdd(&sub, v2, &str2);
+  substitutionAdd(&sub, v3, &str3);
+  ut_assert(verifierIsValidSubstitution(&vrf, &frm, &sub), "invalid sub");
+  frameAddDisjoint(&frm, v2, v3);
+  ut_assert(!verifierIsValidSubstitution(&vrf, &frm, &sub),
+    "sub should be invalid");
+  frameAddDisjoint(&frm, v1, v3);
+  ut_assert(verifierIsValidSubstitution(&vrf, &frm, &sub), "invalid sub");
+  substitutionClean(&sub);
+  frameClean(&frm);
+  verifierClean(&vrf);
+  return 0;
+}
 
 static int
 all(void)
@@ -223,6 +253,7 @@ all(void)
   ut_run(Test_verifierParseConstants);
   ut_run(Test_verifierParseVariables);
   ut_run(Test_verifierIsValidDisjointPairSubstitution);
+  ut_run(Test_verifierIsValidSubstitution);
   return 0;
 }
 
