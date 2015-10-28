@@ -358,12 +358,15 @@ Test_verifierApplyAssertion(void)
 /* apply the assertion */
   verifierApplyAssertion(&vrf, tyx);
   ut_assert(!vrf.err, "assertion application failed");
-  // symstringInit(&stmt);
-  // size_tArrayAppend(&stmt, res, 3);
-  // ut_assert(symstringIsEqual(&vrf.stack.vals[0], &stmt), "result of assertion "
-    // "is wrong");
-  // (void) tyx;
   (void) res;
+  (void) tyx;
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, res, 3);
+  ut_assert(symstringIsEqual(&vrf.stack.vals[0], &stmt), "result of assertion "
+    "is wrong");
+  symstringClean(&stmt);
+/* frm is cleaned here */
+  verifierClean(&vrf);
   return 0;
 }
 

@@ -78,6 +78,9 @@ void
 verifierClean(struct verifier* vrf)
 {
   size_t i;
+  for (i = 0; i < vrf->stack.size; i++) {
+    symstringClean(&vrf->stack.vals[i]);
+  }
   symstringArrayClean(&vrf->stack);
   size_tArrayClean(&vrf->scope);
   for (i = 0; i < vrf->frames.size; i++) {
