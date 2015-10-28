@@ -245,6 +245,129 @@ Test_verifierIsValidSubstitution(void)
 }
 
 static int
+Test_verifierUnify(void)
+{
+  const size_t type = 0;
+  const size_t var = 1;
+  const size_t type2 = 2;
+  const size_t strVals[4] = {type, var, var, var};
+  const size_t floatingVals[2] = {type, var};
+  const size_t floatingVals2[2] = {type2, var};
+  struct verifier vrf;
+  struct substitution sub;
+  struct symstring str;
+  struct symstring floating;
+  verifierInit(&vrf);
+  verifierAddSymbolExplicit(&vrf, "type", symType_constant, 0, 0, 0, 0, 0, 0,
+    0, 0);
+  verifierAddSymbolExplicit(&vrf, "v", symType_variable, 0, 0, 0, 0, 0, 0, 0,
+    0);
+  verifierAddSymbolExplicit(&vrf, "type2", symType_constant, 0, 0, 0, 0, 0, 0,
+    0, 0);
+  symstringInit(&str);
+  symstringInit(&floating);
+  size_tArrayAppend(&str, strVals, 4);
+  size_tArrayAppend(&floating, floatingVals, 2);
+  substitutionInit(&sub);
+  verifierUnify(&vrf, &sub, &str, &floating);
+  ut_assert(!vrf.err, "unification failed");
+  symstringClean(&floating);
+  symstringInit(&floating);
+  symstringClean(&str);
+  symstringInit(&str);
+  size_tArrayAppend(&str, strVals, 4);
+  size_tArrayAppend(&floating, floatingVals2, 2);
+  verifierUnify(&vrf, &sub, &str, &floating);
+  ut_assert(vrf.err == error_mismatchedType, "unifciation should have failed");
+  symstringClean(&str);
+  symstringClean(&floating);
+  substitutionClean(&sub);
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
+Test_verifierApplyAssertion(void)
+{
+  const size_t t = 0;
+  const size_t x = 1;
+  const size_t y = 2;
+  const size_t a = 3;
+  const size_t b = 4;
+  const size_t tx = 5;
+  const size_t ty = 6;
+  const size_t txy = 7;
+  const size_t tyx = 8;
+  const size_t tx_f[2] = {t, x};
+  const size_t ty_f[2] = {t, y};
+  const size_t txy_e[3] = {t, x, y};
+  const size_t tyx_a[3] = {t, y, x};
+  const size_t frame_a[3] = {tx, ty, txy};
+  const size_t stack1[2] = {t, a};
+  const size_t stack2[2] = {t, b};
+  const size_t stack3[3] = {t, a, b};
+  const size_t res[3] = {t, b, a};
+  struct verifier vrf;
+  struct symstring stmt;
+  struct frame frm;
+  verifierInit(&vrf);
+  verifierAddSymbolExplicit(&vrf, "t", symType_constant, 1, 0, 0, 0, 0, 0, 0,
+    0);
+  verifierAddSymbolExplicit(&vrf, "x", symType_variable, 1, 1, 0, 0, 0, 0, 0,
+    0);
+  verifierAddSymbolExplicit(&vrf, "y", symType_variable, 1, 1, 0, 0, 0, 0, 0,
+    0);
+  verifierAddSymbolExplicit(&vrf, "a", symType_variable, 1, 1, 0, 0, 0, 0, 0,
+    0);
+  verifierAddSymbolExplicit(&vrf, "b", symType_variable, 1, 1, 0, 0, 0, 0, 0,
+    0);
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, tx_f, 2);
+  verifierAddStatement(&vrf, &stmt);
+  verifierAddSymbolExplicit(&vrf, "tx", symType_floating, 1, 0, 0, 0, 0, 0, 0,
+    0);
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, ty_f, 2);
+  verifierAddStatement(&vrf, &stmt);
+  verifierAddSymbolExplicit(&vrf, "ty", symType_floating, 1, 0, 0, 1, 0, 0,
+    0, 0);
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, txy_e, 3);
+  verifierAddStatement(&vrf, &stmt);
+  verifierAddSymbolExplicit(&vrf, "txy", symType_essential, 1, 0, 0, 2, 0, 0,
+    0, 0);
+/* the frame for tyx */
+  frameInit(&frm);
+  size_tArrayAppend(&frm.stmts, frame_a, 3);
+  verifierAddFrame(&vrf, &frm);
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, tyx_a, 3);
+  verifierAddStatement(&vrf, &stmt);
+  verifierAddSymbolExplicit(&vrf, "tyx", symType_assertion, 1, 0, 0, 3, 0, 0,
+    0, 0);
+/* prepare the stack */
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, stack1, 2);
+  symstringArrayAdd(&vrf.stack, stmt);
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, stack2, 2);
+  symstringArrayAdd(&vrf.stack, stmt);
+  symstringInit(&stmt);
+  size_tArrayAppend(&stmt, stack3, 3);
+  symstringArrayAdd(&vrf.stack, stmt);
+/* apply the assertion */
+  verifierApplyAssertion(&vrf, tyx);
+  ut_assert(!vrf.err, "assertion application failed");
+  // symstringInit(&stmt);
+  // size_tArrayAppend(&stmt, res, 3);
+  // ut_assert(symstringIsEqual(&vrf.stack.vals[0], &stmt), "result of assertion "
+    // "is wrong");
+  // (void) tyx;
+  (void) res;
+  return 0;
+}
+
+static int
 all(void)
 {
   ut_run(Test_frameInit);
@@ -254,6 +377,8 @@ all(void)
   ut_run(Test_verifierParseVariables);
   ut_run(Test_verifierIsValidDisjointPairSubstitution);
   ut_run(Test_verifierIsValidSubstitution);
+  ut_run(Test_verifierUnify);
+  ut_run(Test_verifierApplyAssertion);
   return 0;
 }
 

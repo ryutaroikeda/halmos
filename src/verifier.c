@@ -22,12 +22,6 @@ symbolClean(struct symbol* sym)
   charArrayClean(&sym->sym);
 }
 
-char*
-symbolGetName(struct symbol* sym)
-{
-  return sym->sym.vals;
-}
-
 void
 frameInit(struct frame* frm)
 {
@@ -137,6 +131,25 @@ verifierGetSymName(const struct verifier* vrf, size_t symId)
   return vrf->symbols.vals[symId].sym.vals;
 }
 
+const char*
+verifierPrintSym(const struct verifier* vrf, struct charArray* msg,
+  const struct symstring* str)
+{
+  size_t i;
+  msg->size = 0;
+  for (i = 0; i < str->size; i++) {
+    const char* name = verifierGetSymName(vrf, str->vals[i]);
+    charArrayAppend(msg, name, strlen(name));
+    charArrayAdd(msg, ' ');
+  }
+/* get rid of the extra space */
+  if (msg->size > 0) {
+    msg->size--;
+  }
+  charArrayAdd(msg, '\0');
+  return msg->vals;
+}
+
 int
 verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
 {
@@ -221,12 +234,6 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
 }
 
 void
-verifierAddStatement(struct verifier* vrf, struct symstring* stmt)
-{
-  symstringArrayAdd(&vrf->stmts, *stmt);
-}
-
-void
 verifierAddConstant(struct verifier* vrf, const char* sym)
 {
   if (!verifierIsFreshSymbol(vrf, sym)) {
@@ -244,6 +251,28 @@ verifierAddVariable(struct verifier* vrf, const char* sym)
     return;
   }
   verifierAddSymbol(vrf, sym, symType_variable);
+}
+
+void
+verifierAddStatement(struct verifier* vrf, struct symstring* stmt)
+{
+  symstringArrayAdd(&vrf->stmts, *stmt);
+}
+
+void
+verifierAddFrame(struct verifier* vrf, struct frame* frm)
+{
+  frameArrayAdd(&vrf->frames, *frm);
+}
+
+void
+verifierAddAssertion(struct verifier* vrf, const char* sym, enum symType type,
+  struct symstring* stmt, struct frame* frm)
+{
+  verifierAddSymbolExplicit(vrf, sym, type, 1, 0, vrf->scope.vals[vrf->rId],
+    vrf->stmts.size, vrf->frames.size, vrf->rId, vrf->r->line, vrf->r->offset);
+  verifierAddStatement(vrf, stmt);
+  verifierAddFrame(vrf, frm);
 }
 
 /* deactivate non-global symbols in the given nesting level */
@@ -636,20 +665,29 @@ verifierPop(struct verifier* vrf)
   return str;
 }
 
-/* get substitution for floating to match a. a will be modified */
+/* get substitution for floating to match a. */
 void
 verifierUnify(struct verifier* vrf, struct substitution* sub,
- struct symstring* a, const struct symstring* floating)
+ const struct symstring* a, const struct symstring* floating)
 {
+  DEBUG_ASSERT(floating->size == 2, "floating has size %lu, should be 2", 
+    floating->size);
+  DEBUG_ASSERT(a->size >= 1, "cannot unify empty string");
   if (a->vals[0] != floating->vals[0]) {
     verifierSetError(vrf, error_mismatchedType);
-/* to do: should report details of symbol, not just the symstring */
-    LOG_ERR("type error");
-    return;
+    struct charArray ca1, ca2;
+    charArrayInit(&ca1, 1);
+    charArrayInit(&ca2, 1);
+    LOG_ERR("cannot unify %s with %s", verifierPrintSym(vrf, &ca1, a),
+      verifierPrintSym(vrf, &ca2, floating));
+    charArrayClean(&ca1);
+    charArrayClean(&ca2);
   }
+  struct symstring str;
+  symstringInit(&str);
 /* get rid of the first constant symbol (the type symbol) */
-  symstringDelete(a, 0);
-  substitutionAdd(sub, floating->vals[1], a);
+  size_tArrayAppend(&str, &a->vals[1], a->size - 1);
+  substitutionAdd(sub, floating->vals[1], &str);
 }
 
 /* use an assertion or a theorem. Pop the appropriate number of entries,  */
@@ -659,7 +697,9 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
 {
   size_t i;
   vrf->err = error_none;
+  DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId %lu", symId);
   const struct symbol* sym = &vrf->symbols.vals[symId];
+  DEBUG_ASSERT(sym->frame < vrf->frames.size, "invalid frame %lu", sym->frame);
   const struct frame* frm = &vrf->frames.vals[sym->frame];
   const size_t argc = frm->stmts.size;
 /* we pop into this array. The last one out is the first argument to the */
@@ -667,6 +707,8 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
   struct symstringArray args;
   symstringArrayInit(&args, argc);
   for (i = 0; i < argc; i++) {
+/* popping and adding to the array causes the order of arguments to be */
+/* reversed */
     struct symstring str = verifierPop(vrf);
     if (vrf->err) { break; }
     symstringArrayAdd(&args, str);
@@ -677,7 +719,9 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
   for (i = 0; i < argc; i++) {
     struct symstring str;
     symstringInit(&str);
-    symstringAppend(&str, &vrf->stmts.vals[frm->stmts.vals[i]]);
+    size_t symId = frm->stmts.vals[i];
+    size_t stmtId = vrf->symbols.vals[symId].stmt;
+    symstringAppend(&str, &vrf->stmts.vals[stmtId]);
     symstringArrayAdd(&pats, str);
   }
 /* create the substitution by unifying $f statements */
@@ -700,10 +744,16 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
       continue;
     }
     substitutionApply(&sub, &pats.vals[i]);
-    if (!symstringIsEqual(&args.vals[i], &pats.vals[i])) {
+    if (!symstringIsEqual(&args.vals[args.size - 1 - i], &pats.vals[i])) {
       verifierSetError(vrf, error_mismatchedEssentialHypothesis);
-  /* to do: add logging for symstrings */
-      LOG_ERR("the argument does not match the hypothesis");
+      struct charArray ca1, ca2;
+      charArrayInit(&ca1, 1);
+      charArrayInit(&ca2, 1);
+      LOG_ERR("the argument %s does not match hypothesis %s",
+        verifierPrintSym(vrf, &ca1, &args.vals[args.size - 1 - i]),
+        verifierPrintSym(vrf, &ca2, &pats.vals[i]));
+      charArrayClean(&ca1);
+      charArrayClean(&ca2);
     }
   }
 /* build the result to push */

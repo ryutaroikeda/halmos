@@ -35,9 +35,9 @@ struct symbol {
   int isTyped;
 /* the nesting level */
   size_t scope;
-/* index to verifier->stmts and verifier->frames. Only valid when type is */
-/* floating, essential, assertion, or provable (or disjoint) */
+/* for $f, $e, $a, and $p statements */
   size_t stmt;
+/* for $a and $p assertions */
   size_t frame;
 /* index to verifier->files, which is an array of readers */
   size_t file; 
@@ -48,8 +48,6 @@ struct symbol {
 void symbolInit(struct symbol* sym);
 
 void symbolClean(struct symbol* sym);
-
-char* symbolGetName(struct symbol* sym);
 
 // struct statement {
 /* indices to verifier->symbols */
@@ -123,6 +121,12 @@ verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
 void
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type);
 
+void
+verifierAddStatement(struct verifier* vrf, struct symstring* stmt);
+
+void
+verifierAddFrame(struct verifier* vrf, struct frame* frm);
+
 char*
 verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement);
 
@@ -143,7 +147,14 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
 int
 verifierIsValidSubstitution(struct verifier* vrf, const struct frame* frm,
   const struct substitution* sub);
-  
+
+void
+verifierUnify(struct verifier* vrf, struct substitution* sub, 
+  const struct symstring* a, const struct symstring* floating);
+
+void
+verifierApplyAssertion(struct verifier* vrf, size_t symId);
+
 void
 verifierParseBlock(struct verifier* vrf);
 #endif
