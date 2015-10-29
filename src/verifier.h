@@ -103,6 +103,7 @@ struct verifier {
 /* index of the current file */
   size_t rId;
   enum error err;
+/* to do: have a dynamic array of errors */
 };
 
 void
@@ -113,6 +114,9 @@ verifierClean(struct verifier* vrf);
 
 size_t
 verifierGetSymId(struct verifier* vrf, const char* sym);
+
+void
+verifierAddFileExplicit(struct verifier* vrf, struct reader* r);
 
 void
 verifierAddFile(struct verifier* vrf, struct reader* r);
@@ -163,6 +167,9 @@ verifierAddProvable(struct verifier* vrf, const char* sym,
   struct symstring* stmt, struct frame* frm);
 
 void
+verifierDeactivateSymbols(struct verifier* vrf);
+
+void
 verifierMakeFrame(struct verifier* vrf, struct frame* frm, 
   const struct symstring* stmt);
 int
@@ -191,7 +198,7 @@ void
 verifierParseVariables(struct verifier* vrf);
 /* stmt must be initialized */
 void
-verifierParseFloat(struct verifier* vrf, struct symstring* stmt);
+verifierParseFloating(struct verifier* vrf, struct symstring* stmt);
 
 void
 verifierParseBlock(struct verifier* vrf);

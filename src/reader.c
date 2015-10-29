@@ -45,7 +45,6 @@ readerInitString(struct reader* r, const char* s)
   r->get = &readerGetString;
 }
 
-/* fix me: don't take FILE* and open the file here */
 void
 readerInitFile(struct reader* r, FILE* f, const char* filename)
 {

@@ -208,12 +208,8 @@ verifierIsType(struct verifier* vrf, size_t symId, enum symType type)
 }
 
 void
-verifierAddFile(struct verifier* vrf, struct reader* r)
+verifierAddFileExplicit(struct verifier* vrf, struct reader* r)
 {
-  if (!verifierIsFreshFile(vrf, readerGetFilename(r))) {
-    LOG_INFO("file %s was already added", readerGetFilename(r));
-    return;
-  }
   readerArrayAdd(&vrf->files, *r);
   size_tArrayAdd(&vrf->scope, 0);
   size_t i;
@@ -222,6 +218,16 @@ verifierAddFile(struct verifier* vrf, struct reader* r)
     symstringInit(&syms);
     symstringArrayAdd(&vrf->active[i], syms);
   }
+}
+
+void
+verifierAddFile(struct verifier* vrf, struct reader* r)
+{
+  if (!verifierIsFreshFile(vrf, readerGetFilename(r))) {
+    LOG_INFO("file %s was already added", readerGetFilename(r));
+    return;
+  }
+  verifierAddFileExplicit(vrf, r);
 }
 
 void
@@ -754,49 +760,6 @@ verifierParseVariables(struct verifier* vrf)
   }
 }
 
-void 
-verifierParseFloat(struct verifier* vrf, struct symstring* stmt)
-{
-  vrf->err = error_none;
-  int isEndOfStatement;
-  char* tok;
-  tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
-  if (vrf->err) { return; }
-  if (isEndOfStatement) {
-    verifierSetError(vrf, error_expectedConstantSymbol);
-    LOG_ERR("statement ended before constant symbol");
-    return;
-  }
-  size_t symId = verifierGetSymId(vrf, tok);
-  if (vrf->err) {
-    LOG_ERR("%s is not defined", tok);
-    return;
-  }
-  if (!verifierIsType(vrf, symId, symType_constant)) {
-    LOG_ERR("%s is not a constant symbol", tok);
-    return;
-  }
-  symstringAdd(stmt, symId);
-  tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
-  if (vrf->err) { return; }
-  if (isEndOfStatement) {
-    verifierSetError(vrf, error_expectedVariableSymbol);
-    LOG_ERR("statement ended before variable symbol");
-    return;
-  }
-  symId = verifierGetSymId(vrf, tok);
-  if (vrf->err) {
-    LOG_ERR("%s is not defined", tok);
-    return;
-  }
-  if (verifierIsType(vrf, symId, symType_variable)) {
-    LOG_ERR("%s is not a variable symbol", tok);
-    return;
-  }
-  symstringAdd(stmt, symId);
-  vrf->symbols.vals[symId].isTyped = 1;
-}
-
 /* return the symId of a variable or set isEndOfStatement or set vrf->err */
 size_t verifierParseDisjoint(struct verifier* vrf, int* isEndOfStatement)
 {
@@ -813,7 +776,7 @@ size_t verifierParseDisjoint(struct verifier* vrf, int* isEndOfStatement)
   if (vrf->err) {
     LOG_ERR("%s is not defined", tok);
   } else if (!verifierIsType(vrf, symId, symType_variable)) {
-    verifierSetError(vrf, error_expectedVariableSymbol);
+    // verifierSetError(vrf, error_expectedVariableSymbol);
     LOG_ERR("%s is not a variable symbol", tok);
   } else if (!vrf->symbols.vals[symId].isTyped) {
     verifierSetError(vrf, error_untypedVariable);
@@ -865,6 +828,8 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
   int isEndOfStatement;
   size_t symId;
   tok = verifierParseSymbol(vrf, &isEndOfStatement, end);
+/* fix me: get rid of all type checks / definition checks and let the caller */
+/* handle them? */
   if (isEndOfStatement) {
     verifierSetError(vrf, error_expectedConstantSymbol);
     LOG_ERR("expected constant symbol before end of statement");
@@ -876,7 +841,7 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
     return;
   }
   if (!verifierIsType(vrf, symId, symType_constant)) {
-    verifierSetError(vrf, error_expectedConstantSymbol);
+    // verifierSetError(vrf, error_expectedConstantSymbol);
     LOG_ERR("%s is not a constant", tok);
     return;
   }
@@ -890,21 +855,97 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
       LOG_ERR("%s is not defined", tok);
       return;
     }
-    if (verifierIsType(vrf, symId, symType_variable)) {
-      if (!vrf->symbols.vals[symId].isTyped) {
-        verifierSetError(vrf, error_invalidSymbol);
-        LOG_ERR("%s needs to be typed by $f", tok);
-        return;
-      }
-    }
+    // if (verifierIsType(vrf, symId, symType_variable)) {
+    //   if (!vrf->symbols.vals[symId].isTyped) {
+    //     verifierSetError(vrf, error_invalidSymbol);
+    //     LOG_ERR("%s needs to be typed by $f", tok);
+    //     return;
+    //   }
+    // }
     symstringAdd(stmt, symId);
   }
+}
+
+void 
+verifierParseFloating(struct verifier* vrf, struct symstring* stmt)
+{
+  verifierParseStatementContent(vrf, stmt, '.');
+  if (stmt->size != 2) {
+    verifierSetError(vrf, error_invalidFloatingStatement);
+    LOG_ERR("floating statements must consist of a constant and a variable "
+      "only");
+    return;
+  }
+  if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
+    verifierSetError(vrf, error_expectedConstantSymbol);
+    LOG_ERR("%s is not a constant symbol", 
+      verifierGetSymName(vrf, stmt->vals[0]));
+  }
+  if (!verifierIsType(vrf, stmt->vals[1], symType_variable)) {
+    verifierSetError(vrf, error_expectedVariableSymbol);
+/* figure out logging later */
+  }
+  // vrf->err = error_none;
+  // int isEndOfStatement;
+  // char* tok;
+  // tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
+  // if (vrf->err) { return; }
+  // if (isEndOfStatement) {
+  //   verifierSetError(vrf, error_expectedConstantSymbol);
+  //   LOG_ERR("statement ended before constant symbol");
+  //   return;
+  // }
+  // size_t symId = verifierGetSymId(vrf, tok);
+  // if (vrf->err) {
+  //   LOG_ERR("%s is not defined", tok);
+  //   return;
+  // }
+  // if (!verifierIsType(vrf, symId, symType_constant)) {
+  //   LOG_ERR("%s is not a constant symbol", tok);
+  //   return;
+  // }
+  // symstringAdd(stmt, symId);
+  // tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
+  // if (vrf->err) { return; }
+  // if (isEndOfStatement) {
+  //   verifierSetError(vrf, error_expectedVariableSymbol);
+  //   LOG_ERR("statement ended before variable symbol");
+  //   return;
+  // }
+  // symId = verifierGetSymId(vrf, tok);
+  // if (vrf->err) {
+  //   LOG_ERR("%s is not defined", tok);
+  // } else if (verifierIsType(vrf, symId, symType_variable)) {
+  //   LOG_ERR("%s is not a variable symbol", tok);
+  // }
+  // symstringAdd(stmt, symId);
+  // vrf->symbols.vals[symId].isTyped = 1;
+}
+
+/* check all variables in the statement are typed */
+int
+verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
+{
+  size_t i;
+  vrf->err = error_none;
+  for (i = 0; i < stmt->size; i++) {
+    const size_t symId = stmt->vals[i];
+    const struct symbol* sym = &vrf->symbols.vals[symId];
+    if (sym->type != symType_variable) { continue; }
+    if (!sym->isTyped) {
+      verifierSetError(vrf, error_untypedVariable);
+      LOG_ERR("The symbol %s is untyped", verifierGetSymName(vrf, symId));
+      return 0;
+    }
+  }
+  return 1;
 }
 
 void
 verifierParseAssertion(struct verifier* vrf, struct symstring* stmt)
 {
   verifierParseStatementContent(vrf, stmt, '.');
+  verifierIsTyped(vrf, stmt);
 }
 
 void
@@ -954,9 +995,11 @@ void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt)
 {
   verifierParseStatementContent(vrf, stmt, '=');
+  verifierIsTyped(vrf, stmt);
   verifierParseProof(vrf, stmt);
 }
 
+/* to do: add symbol after parsing, for $f, $e and $p */
 void
 verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
 {
@@ -1022,7 +1065,7 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
   symstringInit(&stmt);
   if (keyword[1] == 'f') {
     type = symType_floating;
-    verifierParseFloat(vrf, &stmt);
+    verifierParseFloating(vrf, &stmt);
     verifierAddFloating(vrf, tok, &stmt);
   } else if (keyword[1] == 'e') {
     type = symType_essential;

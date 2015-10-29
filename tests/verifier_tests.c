@@ -33,16 +33,101 @@ Test_verifierInit(void)
   vrf.r = &vrf.files.vals[0];
   ut_assert(vrf.files.size == 1, "files.size == %lu, expected 1",
     vrf.files.size);
-  // struct statement stmt;
-  // statementInit(&stmt);
-  // statementArrayAdd(&vrf.stmts, stmt);
-  // ut_assert(vrf.stmts.size == 1, "stmts.size == %lu, expected 1",
-   // vrf.stmts.size);
-  // struct frame frm;
-  // frameInit(&frm);
-  // frameArrayAdd(&vrf.frames, frm);
-  // ut_assert(vrf.frames.size == 1, "frames.size == %lu, expected 1", 
-  //  vrf.frames.size);
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
+Test_verifierDeactivateSymbols(void)
+{
+  struct verifier vrf;
+  struct reader r;
+  verifierInit(&vrf);
+  readerInitString(&r, "");
+  verifierAddFile(&vrf, &r);
+  verifierBeginReadingFile(&vrf, 0);
+  verifierDeactivateSymbols(&vrf);
+  check_err(vrf.err, error_none);
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int 
+Test_verifierMakeFrame(void)
+{
+  size_t i;
+  enum {
+    cst_size = 5,
+    var_size = 4,
+    flt_size = 4,
+    ess_size = 1
+  };
+  const char* cstSyms[cst_size] = {"|-", "wff", "0", "1", "+"};
+  size_t cstIds[cst_size];
+  const char* varSyms[var_size] = {"x", "y", "z", "w"};
+  size_t varIds[var_size];
+  const char* fltSyms[flt_size] = {"wff_x", "wff_y", "wff_z", "wff_w"};
+  size_t fltIds[flt_size];
+  size_t fltSS[flt_size][2];
+  const char* essSyms[ess_size] = {"plus"};
+  // size_t essIds[ess_size];
+  struct verifier vrf;
+  verifierInit(&vrf);
+/* make a mock file because verifierAdd... requires vrf->rId to be valid */
+  LOG_DEBUG("making mock file because verifierAdd...() requires valid "
+    "vrf->rId");
+  struct reader file;
+  readerInitString(&file, "");
+  verifierAddFile(&vrf, &file);
+  verifierBeginReadingFile(&vrf, 0);
+  LOG_DEBUG("adding constants");
+  for (i = 0; i < cst_size; i++) {
+    cstIds[i] = verifierAddConstant(&vrf, cstSyms[i]);
+  }
+  LOG_DEBUG("adding variables");
+  for (i = 0; i < var_size; i++) {
+    varIds[i] = verifierAddVariable(&vrf, varSyms[i]);
+  }
+  LOG_DEBUG("preparing floats");
+  struct symstring wff[flt_size];
+  for (i = 0; i < flt_size; i++) {
+    fltSS[i][0] = cstIds[1];
+    fltSS[i][1] = varIds[i];
+    symstringInit(&wff[i]);
+    size_tArrayAppend(&wff[i], fltSS[i], 2);
+  }
+  LOG_DEBUG("preparing essentials");
+  struct symstring plus;
+  size_t ssplus[4] = {cstIds[0], varIds[0], cstIds[4], varIds[1]};
+  symstringInit(&plus);
+  size_tArrayAppend(&plus, ssplus, 4);
+  LOG_DEBUG("adding floats and essentials");
+  fltIds[0] = verifierAddFloating(&vrf, fltSyms[0], &wff[0]);
+  fltIds[1] = verifierAddFloating(&vrf, fltSyms[1], &wff[1]);
+  verifierAddEssential(&vrf, essSyms[0], &plus);
+  fltIds[2] = verifierAddFloating(&vrf, fltSyms[2], &wff[2]);
+  fltIds[3] = verifierAddFloating(&vrf, fltSyms[3], &wff[3]);
+  check_err(vrf.err, error_none);
+  LOG_DEBUG("preparing assertion");
+  struct symstring asr;
+  symstringInit(&asr);
+  size_t ssasr[6] =
+  {cstIds[0], varIds[0], cstIds[4], varIds[1], cstIds[4], varIds[3]};
+  size_tArrayAppend(&asr, ssasr, 6);
+  LOG_DEBUG("making the frame");
+  struct frame frm;
+  frameInit(&frm);
+  LOG_DEBUG("calling verifierMakeFrame()");
+  verifierMakeFrame(&vrf, &frm, &asr);
+  check_err(vrf.err, error_none);
+  LOG_DEBUG("make sure wff_w has not been added to the frame");
+  for (i = 0; i < frm.stmts.size; i++) {
+    ut_assert(frm.stmts.vals[i] != fltIds[3],
+      "wff_w should not be in the frame");
+  }
+  LOG_DEBUG("cleaning up");
+  frameClean(&frm);
+  symstringClean(&asr);
   verifierClean(&vrf);
   return 0;
 }
@@ -273,86 +358,6 @@ Test_verifierApplyAssertion(void)
   return 0;
 }
 
-static int 
-Test_verifierMakeFrame(void)
-{
-  size_t i;
-  enum {
-    cst_size = 5,
-    var_size = 4,
-    flt_size = 4,
-    ess_size = 1
-  };
-  const char* cstSyms[cst_size] = {"|-", "wff", "0", "1", "+"};
-  size_t cstIds[cst_size];
-  const char* varSyms[var_size] = {"x", "y", "z", "w"};
-  size_t varIds[var_size];
-  const char* fltSyms[flt_size] = {"wff_x", "wff_y", "wff_z", "wff_w"};
-  size_t fltIds[flt_size];
-  size_t fltSS[flt_size][2];
-  const char* essSyms[ess_size] = {"plus"};
-  // size_t essIds[ess_size];
-  struct verifier vrf;
-  verifierInit(&vrf);
-/* make a mock file because verifierAdd... requires vrf->rId to be valid */
-  LOG_DEBUG("making mock file because verifierAdd...() requires valid "
-    "vrf->rId");
-  struct reader file;
-  readerInitString(&file, "");
-  verifierAddFile(&vrf, &file);
-  verifierBeginReadingFile(&vrf, 0);
-  LOG_DEBUG("adding constants");
-  for (i = 0; i < cst_size; i++) {
-    cstIds[i] = verifierAddConstant(&vrf, cstSyms[i]);
-  }
-  LOG_DEBUG("adding variables");
-  for (i = 0; i < var_size; i++) {
-    varIds[i] = verifierAddVariable(&vrf, varSyms[i]);
-  }
-  LOG_DEBUG("preparing floats");
-  struct symstring wff[flt_size];
-  for (i = 0; i < flt_size; i++) {
-    fltSS[i][0] = cstIds[1];
-    fltSS[i][1] = varIds[i];
-    symstringInit(&wff[i]);
-    size_tArrayAppend(&wff[i], fltSS[i], 2);
-  }
-  LOG_DEBUG("preparing essentials");
-  struct symstring plus;
-  size_t ssplus[4] = {cstIds[0], varIds[0], cstIds[4], varIds[1]};
-  symstringInit(&plus);
-  size_tArrayAppend(&plus, ssplus, 4);
-  LOG_DEBUG("adding floats and essentials");
-  fltIds[0] = verifierAddFloating(&vrf, fltSyms[0], &wff[0]);
-  fltIds[1] = verifierAddFloating(&vrf, fltSyms[1], &wff[1]);
-  verifierAddEssential(&vrf, essSyms[0], &plus);
-  fltIds[2] = verifierAddFloating(&vrf, fltSyms[2], &wff[2]);
-  fltIds[3] = verifierAddFloating(&vrf, fltSyms[3], &wff[3]);
-  check_err(vrf.err, error_none);
-  LOG_DEBUG("preparing assertion");
-  struct symstring asr;
-  symstringInit(&asr);
-  size_t ssasr[6] =
-  {cstIds[0], varIds[0], cstIds[4], varIds[1], cstIds[4], varIds[3]};
-  size_tArrayAppend(&asr, ssasr, 6);
-  LOG_DEBUG("making the frame");
-  struct frame frm;
-  frameInit(&frm);
-  LOG_DEBUG("calling verifierMakeFrame()");
-  verifierMakeFrame(&vrf, &frm, &asr);
-  check_err(vrf.err, error_none);
-  LOG_DEBUG("make sure wff_w has not been added to the frame");
-  for (i = 0; i < frm.stmts.size; i++) {
-    ut_assert(frm.stmts.vals[i] != fltIds[3],
-      "wff_w should not be in the frame");
-  }
-  LOG_DEBUG("cleaning up");
-  frameClean(&frm);
-  symstringClean(&asr);
-  verifierClean(&vrf);
-  return 0;
-}
-
 static int
 Test_verifierParseSymbol(void)
 {
@@ -371,7 +376,6 @@ Test_verifierParseSymbol(void)
     check_err(vrf.err, e); \
     verifierClean(&vrf); \
   } while (0)
-
   // testfile("$$", error_expectedEndStatement);
   // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
   //  isEndOfStatement);
@@ -435,7 +439,7 @@ Test_verifierParseConstants(void)
 }
 
 static int
-Test_verifierParseVariables()
+Test_verifierParseVariables(void)
 {
   char* file = "And here were forests ancient as the hills $.\n";
   struct reader r;
@@ -452,18 +456,61 @@ Test_verifierParseVariables()
 }
 
 static int
+Test_verifierParseFloating(void)
+{
+  size_t i;
+  enum {
+    file_size = 5
+  };
+  const char* file[file_size] = {
+    "$. ",
+    "And mid these dancing rocks at once and ever $.\n",
+    "Chopin piano $. ",
+    "wff x $. ",
+    "wff y $. "
+  };
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  struct symstring stmts[file_size];
+  for (i = 0; i < file_size; i++) {
+    symstringInit(&stmts[i]);
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+    check_err(vrf.err, error_none);
+  }
+#define test_file(rId, error) \
+do { \
+  verifierBeginReadingFile(&vrf, rId); \
+  verifierParseFloating(&vrf, &stmts[rId]); \
+  check_err(vrf.err, error); \
+} while (0)
+  test_file(0, error_invalidFloatingStatement);
+  test_file(1, error_invalidFloatingStatement);
+  test_file(2, error_invalidFloatingStatement);
+  verifierAddConstant(&vrf, "wff");
+  test_file(3, error_invalidFloatingStatement);
+  verifierAddVariable(&vrf, "y");
+  test_file(4, error_none);
+  return 0;
+#undef test_file
+}
+
+static int
 all(void)
 {
   ut_run(Test_frameInit);
   ut_run(Test_verifierInit);
+  ut_run(Test_verifierDeactivateSymbols);
+  ut_run(Test_verifierMakeFrame);
   ut_run(Test_verifierIsValidDisjointPairSubstitution);
   ut_run(Test_verifierIsValidSubstitution);
   ut_run(Test_verifierUnify);
   ut_run(Test_verifierApplyAssertion);
-  ut_run(Test_verifierMakeFrame);
   ut_run(Test_verifierParseSymbol);
   ut_run(Test_verifierParseConstants);
   ut_run(Test_verifierParseVariables);
+  ut_run(Test_verifierParseFloating);
   return 0;
 }
 
