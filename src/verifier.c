@@ -296,12 +296,24 @@ verifierAddStatement(struct verifier* vrf, struct symstring* stmt)
   return vrf->stmts.size - 1;
 }
 
-size_t
+/* add every pair of variables */
+void
 verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
 {
-  size_t symId = verifierAddSymbol(vrf, "", symType_disjoint);
-  vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, stmt);
-  return symId;
+  size_t i, j;
+  LOG_DEBUG("adding entries for each disjoint variable restriction pair");
+  if (stmt->size > 0) {
+    for (i = 0; i < stmt->size - 1; i++) {
+      for (j = i + 1; j < stmt->size; j++) {
+        size_t symId = verifierAddSymbol(vrf, "", symType_disjoint);
+        struct symstring pair;
+        symstringInit(&pair);
+        symstringAdd(&pair, stmt->vals[i]);
+        symstringAdd(&pair, stmt->vals[j]);
+        vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, &pair);
+      }
+    }
+  }
 }
 
 size_t
@@ -649,6 +661,25 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
   symstringArrayClean(&args);
 }
 
+/* check all variables in the statement are typed */
+int
+verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
+{
+  size_t i;
+  vrf->err = error_none;
+  for (i = 0; i < stmt->size; i++) {
+    const size_t symId = stmt->vals[i];
+    const struct symbol* sym = &vrf->symbols.vals[symId];
+    if (sym->type != symType_variable) { continue; }
+    if (!sym->isTyped) {
+      verifierSetError(vrf, error_untypedVariable);
+      LOG_ERR("The symbol %s is untyped", verifierGetSymName(vrf, symId));
+      return 0;
+    }
+  }
+  return 1;
+}
+
 void
 verifierParseComment(struct verifier* vrf)
 {
@@ -730,95 +761,9 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
   return tok;
 }
 
-void
-verifierParseConstants(struct verifier* vrf)
-{
-  vrf->err = error_none;
-  int isEndOfStatement;
-  char* tok;
-  while (1) {
-    tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
-    if (vrf->err) { return; }
-    if (isEndOfStatement) { break; }
-    verifierAddConstant(vrf, tok);
-    if (vrf->err) { return; }
-  }
-}
-
-void
-verifierParseVariables(struct verifier* vrf)
-{
-  vrf->err = error_none;
-  int isEndOfStatement;
-  char* tok;
-  while (1) {
-    tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
-    if (vrf->err) { return; }
-    if (isEndOfStatement) { break; }
-    verifierAddVariable(vrf, tok);
-    if (vrf->err) { return; }
-  }
-}
-
-/* return the symId of a variable or set isEndOfStatement or set vrf->err */
-size_t verifierParseDisjoint(struct verifier* vrf, int* isEndOfStatement)
-{
-  char* tok;
-  vrf->err = error_none;
-  *isEndOfStatement = 0;
-  readerSkip(vrf->r, whitespace);
-  tok = readerGetToken(vrf->r, whitespace);
-  if (strcmp(tok, "$.") == 0) {
-    *isEndOfStatement = 1;
-    return 0;
-  }
-  size_t symId = verifierGetSymId(vrf, tok);
-  if (vrf->err) {
-    LOG_ERR("%s is not defined", tok);
-  } else if (!verifierIsType(vrf, symId, symType_variable)) {
-    // verifierSetError(vrf, error_expectedVariableSymbol);
-    LOG_ERR("%s is not a variable symbol", tok);
-  } else if (!vrf->symbols.vals[symId].isTyped) {
-    verifierSetError(vrf, error_untypedVariable);
-    LOG_ERR("%s must be typed with a $f statement", tok);
-  }
-  return symId;
-}
-
-void
-verifierParseDisjoints(struct verifier* vrf)
-{
-  vrf->err = error_none;
-  size_t symId;
-  int isEndOfStatement;
-  struct size_tArray vars;
-  size_tArrayInit(&vars, 2);
-  symId = verifierParseDisjoint(vrf, &isEndOfStatement);
-  size_tArrayAdd(&vars, symId);
-  while (!isEndOfStatement && !vrf->err) {
-    symId = verifierParseDisjoint(vrf, &isEndOfStatement);
-    if (isEndOfStatement) {
-      break;
-    }
-/* add an entry for each pair of disjoint variables */
-    size_t i;
-    for (i = 0; i < vars.size; i++) {
-/* add a symbol for the disjoint pair */
-      verifierAddSymbol(vrf, "", symType_disjoint);
-      struct symstring stmt;
-      symstringInit(&stmt);
-      symstringAdd(&stmt, symId);
-      symstringAdd(&stmt, vars.vals[i]);
-      symstringArrayAdd(&vrf->stmts, stmt);
-    }
-    size_tArrayAdd(&vars, symId);
-  }
-  size_tArrayClean(&vars);
-}
-
-/* parses statements (excluding floating hypotheses and proofs) of the form */
-/* <constant> <symbol list>. All variables in <symbol list> must be typed by */
-/* a $f statement */
+/* parses statements (excluding proofs) of the form */
+/* <constant> <symbol list>. */
+/* fix me: remove definition & type checks and let the caller handle them. */
 void
 verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
   char end)
@@ -863,6 +808,74 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
     //   }
     // }
     symstringAdd(stmt, symId);
+  }
+}
+
+void
+verifierParseConstants(struct verifier* vrf)
+{
+  vrf->err = error_none;
+  int isEndOfStatement;
+  char* tok;
+  while (1) {
+    tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
+    if (vrf->err) { return; }
+    if (isEndOfStatement) { break; }
+    verifierAddConstant(vrf, tok);
+    if (vrf->err) { return; }
+  }
+}
+
+void
+verifierParseVariables(struct verifier* vrf)
+{
+  vrf->err = error_none;
+  int isEndOfStatement;
+  char* tok;
+  while (1) {
+    tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
+    if (vrf->err) { return; }
+    if (isEndOfStatement) { break; }
+    verifierAddVariable(vrf, tok);
+    if (vrf->err) { return; }
+  }
+}
+
+/* return the symId of a variable or set isEndOfStatement or set vrf->err */
+// size_t verifierParseDisjoint(struct verifier* vrf, int* isEndOfStatement)
+// {
+//   char* tok;
+//   vrf->err = error_none;
+//   *isEndOfStatement = 0;
+//   readerSkip(vrf->r, whitespace);
+//   tok = readerGetToken(vrf->r, whitespace);
+//   if (strcmp(tok, "$.") == 0) {
+//     *isEndOfStatement = 1;
+//     return 0;
+//   }
+//   size_t symId = verifierGetSymId(vrf, tok);
+//   if (vrf->err) {
+//     LOG_ERR("%s is not defined", tok);
+//   } else if (!verifierIsType(vrf, symId, symType_variable)) {
+//     // verifierSetError(vrf, error_expectedVariableSymbol);
+//     LOG_ERR("%s is not a variable symbol", tok);
+//   } else if (!vrf->symbols.vals[symId].isTyped) {
+//     verifierSetError(vrf, error_untypedVariable);
+//     LOG_ERR("%s must be typed with a $f statement", tok);
+//   }
+//   return symId;
+// }
+
+void
+verifierParseDisjoints(struct verifier* vrf, struct symstring* stmt)
+{
+  size_t i;
+  struct symstring vars;
+  verifierParseStatementContent(vrf, &vars, '.');
+  verifierIsTyped(vrf, &vars);
+/* all symbols must be variables */
+  for (i = 0; i < stmt->size; i++) {
+    verifierIsType(vrf, stmt->vals[i], symType_variable);
   }
 }
 
@@ -920,25 +933,6 @@ verifierParseFloating(struct verifier* vrf, struct symstring* stmt)
   // }
   // symstringAdd(stmt, symId);
   // vrf->symbols.vals[symId].isTyped = 1;
-}
-
-/* check all variables in the statement are typed */
-int
-verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
-{
-  size_t i;
-  vrf->err = error_none;
-  for (i = 0; i < stmt->size; i++) {
-    const size_t symId = stmt->vals[i];
-    const struct symbol* sym = &vrf->symbols.vals[symId];
-    if (sym->type != symType_variable) { continue; }
-    if (!sym->isTyped) {
-      verifierSetError(vrf, error_untypedVariable);
-      LOG_ERR("The symbol %s is untyped", verifierGetSymName(vrf, symId));
-      return 0;
-    }
-  }
-  return 1;
 }
 
 void
@@ -1033,7 +1027,10 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
     } else if (tok[1] == 'v') {
       verifierParseVariables(vrf);
     } else if (tok[1] == 'd') {
-      verifierParseDisjoints(vrf);
+      struct symstring stmt;
+      symstringInit(&stmt);
+      verifierParseDisjoints(vrf, &stmt);
+      verifierAddDisjoint(vrf, &stmt);
     } else if (tok[1] == '{') {
       verifierParseBlock(vrf);
     } else if (tok[1] == '}') {

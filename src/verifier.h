@@ -143,7 +143,8 @@ verifierAddVariable(struct verifier* vrf, const char* sym);
 size_t
 verifierAddStatement(struct verifier* vrf, struct symstring* stmt);
 
-size_t
+/* add every pair of variables in stmt as a disjoint variable restriction  */
+void
 verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt);
 
 size_t
