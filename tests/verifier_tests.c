@@ -492,6 +492,10 @@ do { \
   test_file(3, error_invalidFloatingStatement);
   verifierAddVariable(&vrf, "y");
   test_file(4, error_none);
+  for (i = 0; i < file_size; i++) {
+    symstringClean(&stmts[i]);
+  }
+  verifierClean(&vrf);
   return 0;
 #undef test_file
 }
