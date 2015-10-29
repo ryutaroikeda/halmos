@@ -30,6 +30,7 @@ struct symbol {
   struct charArray sym;
   enum symType type;
 /* 1 if the symbol is currently in scope */
+/* used for checking freshness */
   int isActive;
 /* 1 if the symbol is a variable and typed through $f */
   int isTyped;
@@ -90,6 +91,9 @@ struct verifier {
   struct symbolArray symbols;
   struct symstringArray stmts;
   struct frameArray frames;
+/* the symbols currently in scope. active[t].vals[f] gives the list of */
+/* variables in scope of type t in file f */
+  struct symstringArray active[symType_size];
 /* reverse polish notation stack for verifying proofs */
   struct symstringArray stack;
 /* the file currently being verified */
@@ -114,31 +118,53 @@ void
 verifierAddFile(struct verifier* vrf, struct reader* r);
 
 void
+verifierBeginReadingFile(struct verifier* vrf, size_t rId);
+
+/* return the symId of the symbol added */
+size_t
 verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
  enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
  size_t frame, size_t file, size_t line, size_t offset);
 
-void
+size_t
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type);
 
-void
+size_t
+verifierAddConstant(struct verifier* vrf, const char* sym);
+
+size_t
+verifierAddVariable(struct verifier* vrf, const char* sym);
+
+/* return the id of the statement */
+size_t
 verifierAddStatement(struct verifier* vrf, struct symstring* stmt);
 
-void
+size_t
+verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt);
+
+size_t
+verifierAddFloating(struct verifier* vrf, const char* sym, 
+  struct symstring* stmt);
+
+size_t
+verifierAddEssential(struct verifier* vrf, const char* sym,
+  struct symstring* stmt);
+
+/* return the id of the frame */
+size_t
 verifierAddFrame(struct verifier* vrf, struct frame* frm);
 
-char*
-verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement);
+size_t
+verifierAddAssertion(struct verifier* vrf, const char* sym,
+  struct symstring* stmt, struct frame* frm);
 
-void 
-verifierParseConstants(struct verifier* vrf);
+size_t
+verifierAddProvable(struct verifier* vrf, const char* sym,
+  struct symstring* stmt, struct frame* frm);
 
 void
-verifierParseVariables(struct verifier* vrf);
-/* stmt must be initialized */
-void
-verifierParseFloat(struct verifier* vrf, struct symstring* stmt);
-
+verifierMakeFrame(struct verifier* vrf, struct frame* frm, 
+  const struct symstring* stmt);
 int
 verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
  const struct frame* frm, const struct substitution* sub, size_t v1,
@@ -155,6 +181,19 @@ verifierUnify(struct verifier* vrf, struct substitution* sub,
 void
 verifierApplyAssertion(struct verifier* vrf, size_t symId);
 
+char*
+verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end);
+
+void 
+verifierParseConstants(struct verifier* vrf);
+
+void
+verifierParseVariables(struct verifier* vrf);
+/* stmt must be initialized */
+void
+verifierParseFloat(struct verifier* vrf, struct symstring* stmt);
+
 void
 verifierParseBlock(struct verifier* vrf);
+
 #endif

@@ -22,7 +22,9 @@ static const char* errorStrings[error_size] = {
   "mismatchedType",
   "mismatchedEssentialHypothesis",
   "invalidSubstitutionOfDisjoint",
-  "missingDisjointRestriction"
+  "missingDisjointRestriction",
+  "unusedTermInProof",
+  "incorrectProof"
 };
 
 const char*
