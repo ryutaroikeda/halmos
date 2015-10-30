@@ -86,6 +86,8 @@ frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2);
 
 
 struct verifier {
+/* a special symbol with symId 0 */
+  struct symbol symbol_none;
 /* files opened for verification */
   struct readerArray files;
   struct symbolArray symbols;
@@ -103,6 +105,8 @@ struct verifier {
 /* index of the current file */
   size_t rId;
   enum error err;
+/* the number of errors reported */
+  size_t errc;
 /* to do: have a dynamic array of errors */
 };
 
@@ -197,18 +201,28 @@ verifierParseConstants(struct verifier* vrf);
 
 void
 verifierParseVariables(struct verifier* vrf);
+
+void
+verifierParseDisjoints(struct verifier* vrf, struct symstring* stmt);
+
 /* stmt must be initialized */
 void
 verifierParseFloating(struct verifier* vrf, struct symstring* stmt);
 
 void
-verifierParseDisjoints(struct verifier* vrf, struct symstring* stmt);
+verifierParseEssential(struct verifier* vrf, struct symstring* stmt);
+
+void
+verifierParseAssertion(struct verifier* vrf, struct symstring* stmt);
 
 void
 verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof);
 
 void
 verifierParseProof(struct verifier* vrf, const struct symstring* thm);
+
+void
+verifierParseProvable(struct verifier* vrf, struct symstring* stmt);
 
 void
 verifierParseBlock(struct verifier* vrf);

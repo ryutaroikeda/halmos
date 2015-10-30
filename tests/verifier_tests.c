@@ -302,15 +302,15 @@ Test_verifierUnify(void)
 static int
 Test_verifierApplyAssertion(void)
 {
-  const size_t t = 0;
-  const size_t x = 1;
-  const size_t y = 2;
-  const size_t a = 3;
-  const size_t b = 4;
-  const size_t tx = 5;
-  const size_t ty = 6;
-  const size_t txy = 7;
-  const size_t tyx = 8;
+  const size_t t = 1;
+  const size_t x = 2;
+  const size_t y = 3;
+  const size_t a = 4;
+  const size_t b = 5;
+  const size_t tx = 6;
+  const size_t ty = 7;
+  const size_t txy = 8;
+  const size_t tyx = 9;
   const size_t tx_f[2] = {t, x};
   const size_t ty_f[2] = {t, y};
   const size_t txy_e[3] = {t, x, y};
@@ -371,8 +371,6 @@ Test_verifierApplyAssertion(void)
 /* apply the assertion */
   verifierApplyAssertion(&vrf, tyx);
   ut_assert(!vrf.err, "assertion application failed");
-  (void) res;
-  (void) tyx;
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, res, 3);
   ut_assert(symstringIsEqual(&vrf.stack.vals[0], &stmt), "result of assertion "
@@ -429,23 +427,20 @@ Test_verifierParseConstants(void)
   char* file;
   struct reader r;
   struct verifier vrf;
-#define testparse(f, e, n) \
-  do { \
-    file = f; \
-    readerInitString(&r, file); \
-    verifierInit(&vrf); \
-    verifierAddFile(&vrf, &r); \
-    vrf.r = &vrf.files.vals[0]; \
-    vrf.rId = 0; \
-    verifierParseConstants(&vrf); \
-    check_err(vrf.err, e); \
-    ut_assert(vrf.symbols.size == n, "size == %lu, expected %lu", \
-     vrf.symbols.size, n); \
-    verifierClean(&vrf); \
-  } while (0)
-  testparse("", error_unterminatedStatement, (size_t)0);
-  testparse("A savage place! as holy and enchanted $.\n", error_none,
-   (size_t)7);
+#define testparse(f, e) \
+do { \
+  file = f; \
+  readerInitString(&r, file); \
+  verifierInit(&vrf); \
+  verifierAddFile(&vrf, &r); \
+  vrf.r = &vrf.files.vals[0]; \
+  vrf.rId = 0; \
+  verifierParseConstants(&vrf); \
+  check_err(vrf.err, e); \
+  verifierClean(&vrf); \
+} while (0)
+  testparse("", error_unterminatedStatement);
+  testparse("A savage place! as holy and enchanted $.\n", error_none);
   readerInitString(&r, "savage $.\n");
   charArrayAppend(&r.filename, "file1", 5 + 1);
   verifierInit(&vrf);
@@ -481,51 +476,6 @@ Test_verifierParseVariables(void)
 }
 
 static int
-Test_verifierParseFloating(void)
-{
-  size_t i;
-  enum {
-    file_size = 5
-  };
-  const char* file[file_size] = {
-    "$. ",
-    "And mid these dancing rocks at once and ever $.\n",
-    "Chopin piano $. ",
-    "wff x $. ",
-    "wff y $. "
-  };
-  struct verifier vrf;
-  verifierInit(&vrf);
-  struct reader r[file_size];
-  struct symstring stmts[file_size];
-  for (i = 0; i < file_size; i++) {
-    symstringInit(&stmts[i]);
-    readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
-    check_err(vrf.err, error_none);
-  }
-#define test_file(rId, error) \
-do { \
-  verifierBeginReadingFile(&vrf, rId); \
-  verifierParseFloating(&vrf, &stmts[rId]); \
-  check_err(vrf.err, error); \
-} while (0)
-  test_file(0, error_invalidFloatingStatement);
-  test_file(1, error_invalidFloatingStatement);
-  test_file(2, error_invalidFloatingStatement);
-  verifierAddConstant(&vrf, "wff");
-  test_file(3, error_invalidFloatingStatement);
-  verifierAddVariable(&vrf, "y");
-  test_file(4, error_none);
-  for (i = 0; i < file_size; i++) {
-    symstringClean(&stmts[i]);
-  }
-  verifierClean(&vrf);
-  return 0;
-#undef test_file
-}
-
-static int
 Test_verifierParseDisjoints(void)
 {
   enum {
@@ -551,17 +501,186 @@ Test_verifierParseDisjoints(void)
   }
   LOG_DEBUG("call BeginReadingFile to set valid vrf.rId");
   verifierBeginReadingFile(&vrf, 0);
-  verifierAddConstant(&vrf, "c");
-  verifierAddVariable(&vrf, "v");
+  size_t c = verifierAddConstant(&vrf, "c");
+  size_t v = verifierAddVariable(&vrf, "v");
   struct symstring flt;
   symstringInit(&flt);
-  symstringAdd(&flt, 0);
-  symstringAdd(&flt, 1);
+  symstringAdd(&flt, c);
+  symstringAdd(&flt, v);
   verifierAddFloating(&vrf, "f", &flt);
   for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
     verifierBeginReadingFile(&vrf, i);
     verifierParseDisjoints(&vrf, &stmts[i]);
     check_err(vrf.err, errs[i]);
+  }
+  LOG_DEBUG("clean up");
+  for (i = 0; i < file_size; i++) {
+    symstringClean(&stmts[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
+Test_verifierParseFloating(void)
+{
+  size_t i;
+  enum {
+    file_size = 5
+  };
+  const char* file[file_size] = {
+    "$. ",
+    "And mid these dancing rocks at once and ever $.\n",
+    "Chopin piano $. ",
+    "wff x $. ",
+    "wff y $. "
+  };
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  struct symstring stmts[file_size];
+  for (i = 0; i < file_size; i++) {
+    symstringInit(&stmts[i]);
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+    check_err(vrf.err, error_none);
+  }
+#define test_file(rId, error) \
+do { \
+  LOG_DEBUG("testing file %d", rId); \
+  verifierBeginReadingFile(&vrf, rId); \
+  verifierParseFloating(&vrf, &stmts[rId]); \
+  check_err(vrf.err, error); \
+} while (0)
+  test_file(0, error_invalidFloatingStatement);
+  test_file(1, error_invalidFloatingStatement);
+  test_file(2, error_expectedVariableSymbol);
+  verifierAddConstant(&vrf, "wff");
+  test_file(3, error_expectedVariableSymbol);
+  verifierAddVariable(&vrf, "y");
+  test_file(4, error_none);
+  for (i = 0; i < file_size; i++) {
+    symstringClean(&stmts[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+#undef test_file
+}
+
+static int
+Test_verifierParseEssential(void)
+{
+  enum {
+    file_size = 3
+  };
+  const char* file[file_size] = {
+    "$. ",
+    "v |- $. ",
+    "|- v $. "
+  };
+  const enum error errs[file_size] = {
+    error_invalidEssentialStatement,
+/* we expect this error to be emitted, but it won't be the most recent */
+/* for now, use error_none */
+    // error_expectedConstantSymbol,
+    error_none,
+    error_none
+  };
+  const size_t errcs[file_size] = {
+    1,
+    1,
+    0
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  struct symstring stmts[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+    symstringInit(&stmts[i]);
+  }
+  verifierBeginReadingFile(&vrf, 0);
+  size_t c = verifierAddConstant(&vrf, "|-");
+  size_t v = verifierAddVariable(&vrf, "v");
+  struct symstring flt;
+  symstringInit(&flt);
+  symstringAdd(&flt, c);
+  symstringAdd(&flt, v);
+  verifierAddFloating(&vrf, "f", &flt);
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    vrf.errc = 0;
+    verifierBeginReadingFile(&vrf, i);
+    LOG_DEBUG("parsing essential");
+    verifierParseEssential(&vrf, &stmts[i]);
+    LOG_DEBUG("done parsing, checking for errors");
+    check_err(vrf.err, errs[i]);
+    ut_assert(vrf.errc == errcs[i], "error count vrf.errc = %lu, expected %lu",
+      vrf.errc, errcs[i]);
+  }
+  LOG_DEBUG("clean up");
+  for (i = 0; i < file_size; i++) {
+    symstringClean(&stmts[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
+Test_verifierParseAssertion(void)
+{
+  enum {
+    file_size = 3
+  };
+  const char* file[file_size] = {
+    "$. ",
+    "v |- $. ",
+    "|- v $. "
+  };
+  const enum error errs[file_size] = {
+    error_invalidAssertionStatement,
+/* we expect this error to be emitted, but it won't be the most recent */
+/* for now, use error_none */
+    // error_expectedConstantSymbol,
+    error_none,
+    error_none
+  };
+  const size_t errcs[file_size] = {
+    1,
+    1,
+    0
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  struct symstring stmts[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+    symstringInit(&stmts[i]);
+  }
+  verifierBeginReadingFile(&vrf, 0);
+  size_t c = verifierAddConstant(&vrf, "|-");
+  size_t v = verifierAddVariable(&vrf, "v");
+  struct symstring flt;
+  symstringInit(&flt);
+  symstringAdd(&flt, c);
+  symstringAdd(&flt, v);
+  verifierAddFloating(&vrf, "f", &flt);
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    vrf.errc = 0;
+    verifierBeginReadingFile(&vrf, i);
+    LOG_DEBUG("parsing assertion");
+    verifierParseAssertion(&vrf, &stmts[i]);
+    LOG_DEBUG("done parsing, checking for errors");
+    check_err(vrf.err, errs[i]);
+    ut_assert(vrf.errc == errcs[i], "error count vrf.errc = %lu, expected %lu",
+      vrf.errc, errcs[i]);
   }
   LOG_DEBUG("clean up");
   for (i = 0; i < file_size; i++) {
@@ -673,6 +792,52 @@ do { \
 }
 
 static int
+Test_verifierParseProvable(void)
+{
+  enum {
+    file_size = 2
+  };
+  const char* file[file_size] = {
+    "type var $= $. ",
+    "type var $= flt $. "
+  };
+  const enum error errs[file_size] = {
+    error_incorrectProof,
+    error_none
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+    check_err(vrf.err, error_none);
+  }
+  verifierBeginReadingFile(&vrf, 0);
+  size_t type, var, flt;
+  type = verifierAddConstant(&vrf, "type");
+  var = verifierAddVariable(&vrf, "var");
+  struct symstring floating;
+  symstringInit(&floating);
+  symstringAdd(&floating, type);
+  symstringAdd(&floating, var);
+  flt = verifierAddFloating(&vrf, "flt", &floating);
+  check_err(vrf.err, error_none);
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    struct symstring stmt;
+    symstringInit(&stmt);
+    verifierBeginReadingFile(&vrf, i);
+    verifierParseProvable(&vrf, &stmt);
+    check_err(vrf.err, errs[i]);
+    symstringClean(&stmt);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
 all(void)
 {
   ut_run(Test_frameInit);
@@ -687,10 +852,13 @@ all(void)
   ut_run(Test_verifierParseSymbol);
   ut_run(Test_verifierParseConstants);
   ut_run(Test_verifierParseVariables);
-  ut_run(Test_verifierParseFloating);
   ut_run(Test_verifierParseDisjoints);
+  ut_run(Test_verifierParseFloating);
+  ut_run(Test_verifierParseEssential);
+  ut_run(Test_verifierParseAssertion);
   ut_run(Test_verifierParseProofSymbol);
   ut_run(Test_verifierParseProof);
+  ut_run(Test_verifierParseProvable);
   return 0;
 }
 

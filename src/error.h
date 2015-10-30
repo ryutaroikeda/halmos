@@ -20,6 +20,7 @@ enum error {
   error_duplicateFile,
   error_invalidKeyword,
   error_invalidFloatingStatement,
+  error_invalidEssentialStatement,
   error_invalidAssertionStatement,
   error_stackUnderflow,
   error_mismatchedType,

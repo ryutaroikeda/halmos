@@ -19,6 +19,8 @@ static const char* errorStrings[error_size] = {
   "duplicateFile",
   "invalidKeyword",
   "invalidFloatingStatement",
+  "invalidEssentialStatement",
+  "invalidAssertionStatement",
   "stackUnderflow",
   "mismatchedType",
   "mismatchedEssentialHypothesis",

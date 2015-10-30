@@ -64,8 +64,12 @@ void
 verifierInit(struct verifier* vrf)
 {
   size_t i;
+/* initialize symbol_none */
+  symbolInit(&vrf->symbol_none);
+  charArrayAppend(&vrf->symbol_none.sym, "$none", 5 + 1);
   readerArrayInit(&vrf->files, 1);
   symbolArrayInit(&vrf->symbols, 1);
+  symbolArrayAdd(&vrf->symbols, vrf->symbol_none);
   symstringArrayInit(&vrf->stmts, 1);
   frameArrayInit(&vrf->frames, 1);
   for (i = 0; i < symType_size; i++) {
@@ -76,6 +80,7 @@ verifierInit(struct verifier* vrf)
   vrf->r = NULL;
   vrf->rId = 0;
   vrf->err = error_none;
+  vrf->errc = 0;
 }
 
 void
@@ -121,6 +126,7 @@ void
 verifierSetError(struct verifier* vrf, enum error err)
 {
   vrf->err = err;
+  vrf->errc++;
 /* to do: add vrf->errorsum for more details on the error */
 }
 
@@ -129,12 +135,17 @@ verifierGetSymId(struct verifier* vrf, const char* sym)
 {
   size_t i;
   vrf->err = error_none;
+  DEBUG_ASSERT(sym, "given symbol is NULL");
   for (i = 0; i < vrf->symbols.size; i++) {
+    DEBUG_ASSERT(vrf->symbols.vals[i].sym.vals, 
+      "symbol from symbol table is NULL");
     if (strcmp(vrf->symbols.vals[i].sym.vals, sym) == 0) {
       return i;
     }
   }
   verifierSetError(vrf, error_undefinedSymbol);
+  LOG_ERR("%s is not defined", sym);
+/* 0 is the symId of symbol_none */
   return 0;
 }
 
@@ -166,6 +177,7 @@ verifierPrintSym(const struct verifier* vrf, struct charArray* msg,
 int
 verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
 {
+  DEBUG_ASSERT(sym, "sym is NULL");
   size_t symId = verifierGetSymId(vrf, sym);
   if (vrf->err == error_undefinedSymbol) {
     vrf->err = error_none;
@@ -175,17 +187,18 @@ verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
     return 1;
   }
   verifierSetError(vrf, error_duplicateSymbol);
+  LOG_ERR("%s was used before", sym);
   return 0;
 }
 
 int
-verifierIsFreshFile(struct verifier* vrf, const char* file)
+verifierIsFreshFile(const struct verifier* vrf, const char* file)
 {
+  DEBUG_ASSERT(file, "file is NULL");
   size_t i;
-  vrf->err = error_none;
   for (i = 0; i < vrf->files.size; i++) {
     if (strcmp(readerGetFilename(&vrf->files.vals[i]), file) == 0) {
-      verifierSetError(vrf, error_duplicateFile);
+      // verifierSetError(vrf, error_duplicateFile);
       return 0;
     }
   }
@@ -193,18 +206,10 @@ verifierIsFreshFile(struct verifier* vrf, const char* file)
 }
 
 int
-verifierIsType(struct verifier* vrf, size_t symId, enum symType type)
+verifierIsType(const struct verifier* vrf, size_t symId, enum symType type)
 {
-  enum symType t = vrf->symbols.vals[symId].type;
-  if (t == type) { return 1; }
-  if (type == symType_constant) {
-    verifierSetError(vrf, error_expectedConstantSymbol);
-  } else if (type == symType_variable) {
-    verifierSetError(vrf, error_expectedVariableSymbol);
-  } else if (type == symType_floating) {
-    verifierSetError(vrf, error_expectedFloatingSymbol);
-  }
-  return 0;
+  DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId");
+  return vrf->symbols.vals[symId].type == type;
 }
 
 void
@@ -265,10 +270,7 @@ verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
 size_t
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
 {
-  if (!verifierIsFreshSymbol(vrf, sym)) {
-    LOG_ERR("%s was already used", sym);
-    return 0;
-  }
+  if (!verifierIsFreshSymbol(vrf, sym)) { return 0; }
   size_t symId = verifierAddSymbolExplicit(vrf, sym, type, 1, 0,
     vrf->scope.vals[vrf->rId], vrf->stmts.size, vrf->frames.size, vrf->rId,
     vrf->r->line, vrf->r->offset);
@@ -687,6 +689,7 @@ verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
   vrf->err = error_none;
   for (i = 0; i < stmt->size; i++) {
     const size_t symId = stmt->vals[i];
+    DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId");
     const struct symbol* sym = &vrf->symbols.vals[symId];
     if (sym->type != symType_variable) { continue; }
     if (!sym->isTyped) {
@@ -787,34 +790,12 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
   char* tok;
   int isEndOfStatement;
   size_t symId;
-  tok = verifierParseSymbol(vrf, &isEndOfStatement, end);
-/* fix me: get rid of all type checks / definition checks and let the caller */
-/* handle them? */
-  // if (isEndOfStatement) {
-  //   verifierSetError(vrf, error_expectedConstantSymbol);
-  //   LOG_ERR("expected constant symbol before end of statement");
-  //   return;
-  // }
-  symId = verifierGetSymId(vrf, tok);
-  if (vrf->err) {
-    LOG_ERR("%s is not defined", tok);
-    return;
-  }
-  // if (!verifierIsType(vrf, symId, symType_constant)) {
-  //   // verifierSetError(vrf, error_expectedConstantSymbol);
-  //   LOG_ERR("%s is not a constant", tok);
-  //   return;
-  // }
-  symstringAdd(stmt, symId);
   while (1) {
     tok = verifierParseSymbol(vrf, &isEndOfStatement, end);
-    if (vrf->err) { return; }
+    if (vrf->err) { break; }
+    DEBUG_ASSERT(tok, "tok is NULL");
     if (isEndOfStatement) { break; }
     symId = verifierGetSymId(vrf, tok);
-    if (vrf->err) {
-      LOG_ERR("%s is not defined", tok);
-      return;
-    }
     symstringAdd(stmt, symId);
   }
 }
@@ -857,7 +838,10 @@ verifierParseDisjoints(struct verifier* vrf, struct symstring* stmt)
   verifierIsTyped(vrf, stmt);
 /* all symbols must be variables */
   for (i = 0; i < stmt->size; i++) {
-    verifierIsType(vrf, stmt->vals[i], symType_variable);
+    if (!verifierIsType(vrf, stmt->vals[i], symType_variable)) {
+      verifierSetError(vrf, error_expectedVariableSymbol);
+      LOG_ERR("%s is not a variable", verifierGetSymName(vrf, stmt->vals[i]));
+    }
   }
 }
 
@@ -867,20 +851,42 @@ verifierParseFloating(struct verifier* vrf, struct symstring* stmt)
   verifierParseStatementContent(vrf, stmt, '.');
   if (stmt->size != 2) {
     verifierSetError(vrf, error_invalidFloatingStatement);
-    LOG_ERR("floating statements must consist of a constant and a variable "
-      "only");
+    LOG_ERR("floating statement has size %lu, expected 2", stmt->size);
     return;
   }
+  DEBUG_ASSERT(stmt->vals[0] < vrf->symbols.size, "invalid symId at vals[0]");
   if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
     verifierSetError(vrf, error_expectedConstantSymbol);
     LOG_ERR("%s is not a constant symbol", 
       verifierGetSymName(vrf, stmt->vals[0]));
   }
+  DEBUG_ASSERT(stmt->vals[1] < vrf->symbols.size, "invalid symId at vals[1]");
   if (!verifierIsType(vrf, stmt->vals[1], symType_variable)) {
     verifierSetError(vrf, error_expectedVariableSymbol);
     LOG_ERR("%s is not a variable symbol",
       verifierGetSymName(vrf, stmt->vals[1]));
   }
+}
+
+void
+verifierParseEssential(struct verifier* vrf, struct symstring* stmt)
+{
+  verifierParseStatementContent(vrf, stmt, '.');
+  LOG_DEBUG("done parsing, checking size");
+  if (stmt->size == 0) {
+    verifierSetError(vrf, error_invalidEssentialStatement);
+    LOG_ERR("essential statements must at least contain a constant symbol");
+    return;
+  }
+  LOG_DEBUG("checking first symbol is a constant");
+  DEBUG_ASSERT(stmt->vals[0] < vrf->symbols.size, "invalid symId");
+  if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
+    verifierSetError(vrf, error_expectedConstantSymbol);
+    LOG_ERR("%s is not a constant symbol",
+      verifierGetSymName(vrf, stmt->vals[0]));
+  }
+  LOG_DEBUG("checking variables are typed");
+  verifierIsTyped(vrf, stmt);
 }
 
 void
@@ -890,6 +896,7 @@ verifierParseAssertion(struct verifier* vrf, struct symstring* stmt)
   if (stmt->size == 0) {
     verifierSetError(vrf, error_invalidAssertionStatement);
     LOG_ERR("an assertion must have at least a constant symbol");
+    return;
   }
   if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
     verifierSetError(vrf, error_expectedConstantSymbol);
@@ -1030,7 +1037,7 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
     verifierAddFloating(vrf, tok, &stmt);
   } else if (keyword[1] == 'e') {
     type = symType_essential;
-    verifierParseStatementContent(vrf, &stmt, '.');
+    verifierParseEssential(vrf, &stmt);
     verifierAddEssential(vrf, tok, &stmt);
   } else if (keyword[1] == 'a') {
     type = symType_assertion;

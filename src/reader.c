@@ -58,7 +58,6 @@ readerInitFile(struct reader* r, FILE* f, const char* filename)
 void
 readerClean(struct reader* r)
 {
-/* to do: if a file was opened, close it */
   charArrayClean(&r->tok);
   charArrayClean(&r->filename);
 }
