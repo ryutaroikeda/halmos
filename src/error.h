@@ -25,6 +25,7 @@ enum error {
   error_mismatchedEssentialHypothesis,
   error_invalidSubstitutionOfDisjoint,
   error_missingDisjointRestriction,
+  error_invalidSymbolInProof,
   error_unusedTermInProof,
   error_incorrectProof,
   error_size

@@ -24,6 +24,7 @@ static const char* errorStrings[error_size] = {
   "mismatchedEssentialHypothesis",
   "invalidSubstitutionOfDisjoint",
   "missingDisjointRestriction",
+  "invalidSymbolInProof",
   "unusedTermInProof",
   "incorrectProof"
 };

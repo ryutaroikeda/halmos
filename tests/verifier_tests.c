@@ -501,6 +501,55 @@ do { \
 }
 
 static int
+Test_verifierParseProofSymbol(void)
+{
+  enum {
+    file_size = 4
+  };
+  const char* file[file_size] = {
+    "$. ",
+    "undefined ",
+    "defined_float ",
+    "defined_assert ",
+  };
+  size_t i;
+  int isEndOfProof;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+  }
+#define test_file(f, error) \
+do { \
+  verifierBeginReadingFile(&vrf, f); \
+  verifierParseProofSymbol(&vrf, &isEndOfProof); \
+  check_err(vrf.err, error); \
+} while (0)
+  test_file(0, error_none);
+  test_file(1, error_undefinedSymbol);
+  struct symstring stmt1;
+  symstringInit(&stmt1);
+  verifierAddFloating(&vrf, "defined_float", &stmt1);
+  test_file(2, error_none);
+  struct symstring stmt2;
+  symstringInit(&stmt2);
+  verifierAddAssertion(&vrf, "defined_assert", &stmt2);
+  test_file(3, error_none);
+  ut_assert(vrf.stack.size == 2, "stack size == %lu, should be 2",
+    vrf.stack.size);
+  verifierClean(&vrf);
+  return 0;
+}
+
+// static int
+// Test_verifierParseProof(void)
+// {
+
+// }
+
+static int
 all(void)
 {
   ut_run(Test_frameInit);
@@ -515,6 +564,7 @@ all(void)
   ut_run(Test_verifierParseConstants);
   ut_run(Test_verifierParseVariables);
   ut_run(Test_verifierParseFloating);
+  ut_run(Test_verifierParseProofSymbol);
   return 0;
 }
 

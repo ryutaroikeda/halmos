@@ -161,11 +161,11 @@ verifierAddFrame(struct verifier* vrf, struct frame* frm);
 
 size_t
 verifierAddAssertion(struct verifier* vrf, const char* sym,
-  struct symstring* stmt, struct frame* frm);
+  struct symstring* stmt);
 
 size_t
 verifierAddProvable(struct verifier* vrf, const char* sym,
-  struct symstring* stmt, struct frame* frm);
+  struct symstring* stmt);
 
 void
 verifierDeactivateSymbols(struct verifier* vrf);
@@ -200,6 +200,9 @@ verifierParseVariables(struct verifier* vrf);
 /* stmt must be initialized */
 void
 verifierParseFloating(struct verifier* vrf, struct symstring* stmt);
+
+void
+verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof);
 
 void
 verifierParseBlock(struct verifier* vrf);
