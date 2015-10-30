@@ -305,7 +305,10 @@ verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
   if (stmt->size > 0) {
     for (i = 0; i < stmt->size - 1; i++) {
       for (j = i + 1; j < stmt->size; j++) {
-        size_t symId = verifierAddSymbol(vrf, "", symType_disjoint);
+        size_t symId = verifierAddSymbolExplicit(vrf, "", symType_disjoint, 1,
+         0, vrf->scope.vals[vrf->rId], 0, 0, vrf->rId, vrf->r->line,
+         vrf->r->offset);
+        symstringAdd(&vrf->active[symType_disjoint].vals[vrf->rId], symId);
         struct symstring pair;
         symstringInit(&pair);
         symstringAdd(&pair, stmt->vals[i]);
@@ -314,6 +317,8 @@ verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
       }
     }
   }
+/* clean up the stmt */
+  symstringClean(stmt);
 }
 
 size_t

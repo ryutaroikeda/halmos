@@ -52,6 +52,31 @@ Test_verifierDeactivateSymbols(void)
   return 0;
 }
 
+static int
+Test_verifierAddDisjoint(void)
+{
+  enum {
+    disjoints_size = 5
+  };
+  const size_t disjoints[disjoints_size] = {0, 1, 2, 3, 4};
+  struct symstring d;
+  symstringInit(&d);
+  size_tArrayAppend(&d, disjoints, 5);
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r;
+  readerInitString(&r, "");
+  verifierAddFile(&vrf, &r);
+  verifierBeginReadingFile(&vrf, 0);
+  verifierAddDisjoint(&vrf, &d);
+  check_err(vrf.err, error_none);
+  size_t size = vrf.active[symType_disjoint].vals[0].size;
+  ut_assert(size == 10, 
+    "added %lu disjoint pairs, expected 10", size);
+  verifierClean(&vrf);
+  return 0;
+}
+
 static int 
 Test_verifierMakeFrame(void)
 {
@@ -603,6 +628,7 @@ all(void)
   ut_run(Test_frameInit);
   ut_run(Test_verifierInit);
   ut_run(Test_verifierDeactivateSymbols);
+  ut_run(Test_verifierAddDisjoint);
   ut_run(Test_verifierMakeFrame);
   ut_run(Test_verifierIsValidDisjointPairSubstitution);
   ut_run(Test_verifierIsValidSubstitution);
