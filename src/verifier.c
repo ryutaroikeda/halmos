@@ -317,7 +317,8 @@ verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
 }
 
 size_t
-verifierAddFloating(struct verifier* vrf, const char* sym, struct symstring* stmt)
+verifierAddFloating(struct verifier* vrf, const char* sym, 
+  struct symstring* stmt)
 {
   size_t symId = verifierAddSymbol(vrf, sym, symType_floating);
   vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, stmt);
@@ -533,7 +534,9 @@ verifierIsValidSubstitution(struct verifier* vrf, const struct frame* frm,
 void
 verifierPushSymbol(struct verifier* vrf, size_t symId)
 {
+  DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId");
   const struct symbol* sym = &vrf->symbols.vals[symId];
+  DEBUG_ASSERT(sym->stmt < vrf->stmts.size, "invalid statement");
   const struct symstring* stmt = &vrf->stmts.vals[sym->stmt];
   struct symstring entry;
   symstringInit(&entry);
@@ -939,12 +942,15 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm)
   while (!vrf->err && !isEndOfProof) {
     verifierParseProofSymbol(vrf, &isEndOfProof);
   }
-  if (vrf->stack.size != 1) {
+  if (vrf->stack.size > 1) {
     verifierSetError(vrf, error_unusedTermInProof);
 /* to do: show which terms are unused */
     LOG_ERR("the proof contains unused terms");
   }
-  if (!symstringIsEqual(&vrf->stack.vals[0], thm)) {
+  if (vrf->stack.size == 0) {
+    verifierSetError(vrf, error_incorrectProof);
+    LOG_ERR("the proof is empty");
+  } else if (!symstringIsEqual(&vrf->stack.vals[0], thm)) {
     verifierSetError(vrf, error_incorrectProof);
 /* to do: show why the proof is wrong */
     LOG_ERR("the proof is wrong");

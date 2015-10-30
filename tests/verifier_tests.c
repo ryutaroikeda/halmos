@@ -541,13 +541,61 @@ do { \
     vrf.stack.size);
   verifierClean(&vrf);
   return 0;
+#undef test_file
 }
 
-// static int
-// Test_verifierParseProof(void)
-// {
-
-// }
+static int
+Test_verifierParseProof(void)
+{
+  enum {
+    file_size = 2
+  };
+  const char* file[file_size] = {
+    "$. ",
+    "p $. "
+  };
+  const size_t thms_len[file_size] = {
+    1, 2
+  };
+  const size_t thms_0[1] = {0};
+  const size_t thms_1[2] = {0, 1};
+  const size_t* thms_s[file_size] = {
+    thms_0,
+    thms_1
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  struct symstring thms[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+    symstringInit(&thms[i]);
+    size_tArrayAppend(&thms[i], thms_s[i], thms_len[i]);
+  }
+#define test_file(f, error) \
+do { \
+  verifierBeginReadingFile(&vrf, f); \
+  verifierParseProof(&vrf, &thms[f]); \
+  check_err(vrf.err, error); \
+} while (0)
+  test_file(0, error_incorrectProof);
+  verifierAddConstant(&vrf, "type");
+  verifierAddVariable(&vrf, "var");
+  struct symstring stmt;
+  symstringInit(&stmt);
+  symstringAdd(&stmt, 0);
+  symstringAdd(&stmt, 1);
+  verifierAddFloating(&vrf, "p", &stmt);
+  test_file(1, error_none);
+  for (i = 0; i < file_size; i++) {
+    symstringClean(&thms[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+#undef test_file
+}
 
 static int
 all(void)
@@ -565,6 +613,7 @@ all(void)
   ut_run(Test_verifierParseVariables);
   ut_run(Test_verifierParseFloating);
   ut_run(Test_verifierParseProofSymbol);
+  ut_run(Test_verifierParseProof);
   return 0;
 }
 

@@ -205,6 +205,9 @@ void
 verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof);
 
 void
+verifierParseProof(struct verifier* vrf, const struct symstring* thm);
+
+void
 verifierParseBlock(struct verifier* vrf);
 
 #endif
