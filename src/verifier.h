@@ -202,6 +202,9 @@ void
 verifierParseFloating(struct verifier* vrf, struct symstring* stmt);
 
 void
+verifierParseDisjoints(struct verifier* vrf, struct symstring* stmt);
+
+void
 verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof);
 
 void

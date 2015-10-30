@@ -526,6 +526,52 @@ do { \
 }
 
 static int
+Test_verifierParseDisjoints(void)
+{
+  enum {
+    file_size = 2
+  };
+  const char* file[file_size] = {
+    "v c $. ",
+    "v v $. "
+  };
+  const enum error errs[file_size] = {
+    error_expectedVariableSymbol,
+    error_none
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  struct symstring stmts[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+    symstringInit(&stmts[i]);
+  }
+  LOG_DEBUG("call BeginReadingFile to set valid vrf.rId");
+  verifierBeginReadingFile(&vrf, 0);
+  verifierAddConstant(&vrf, "c");
+  verifierAddVariable(&vrf, "v");
+  struct symstring flt;
+  symstringInit(&flt);
+  symstringAdd(&flt, 0);
+  symstringAdd(&flt, 1);
+  verifierAddFloating(&vrf, "f", &flt);
+  for (i = 0; i < file_size; i++) {
+    verifierBeginReadingFile(&vrf, i);
+    verifierParseDisjoints(&vrf, &stmts[i]);
+    check_err(vrf.err, errs[i]);
+  }
+  LOG_DEBUG("clean up");
+  for (i = 0; i < file_size; i++) {
+    symstringClean(&stmts[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
 Test_verifierParseProofSymbol(void)
 {
   enum {
@@ -554,8 +600,12 @@ do { \
 } while (0)
   test_file(0, error_none);
   test_file(1, error_undefinedSymbol);
+  size_t c = verifierAddConstant(&vrf, "c");
+  size_t v = verifierAddVariable(&vrf, "v");
   struct symstring stmt1;
   symstringInit(&stmt1);
+  symstringAdd(&stmt1, c);
+  symstringAdd(&stmt1, v);
   verifierAddFloating(&vrf, "defined_float", &stmt1);
   test_file(2, error_none);
   struct symstring stmt2;
@@ -638,6 +688,7 @@ all(void)
   ut_run(Test_verifierParseConstants);
   ut_run(Test_verifierParseVariables);
   ut_run(Test_verifierParseFloating);
+  ut_run(Test_verifierParseDisjoints);
   ut_run(Test_verifierParseProofSymbol);
   ut_run(Test_verifierParseProof);
   return 0;

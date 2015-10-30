@@ -325,8 +325,11 @@ size_t
 verifierAddFloating(struct verifier* vrf, const char* sym, 
   struct symstring* stmt)
 {
+  DEBUG_ASSERT(stmt->size == 2, "floating has size %lu, must be 2",
+    stmt->size);
   size_t symId = verifierAddSymbol(vrf, sym, symType_floating);
   vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, stmt);
+  vrf->symbols.vals[stmt->vals[1]].isTyped = 1;
   return symId;
 }
 
@@ -385,6 +388,7 @@ verifierDeactivateSymbols(struct verifier* vrf)
       struct symbol* sym = &vrf->symbols.vals[syms->vals[j - 1]];
       if (scope != sym->scope) { break; }
       sym->isActive = 0;
+      sym->isTyped = 0;
       syms->size--;
     }
   }
@@ -786,21 +790,21 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
   tok = verifierParseSymbol(vrf, &isEndOfStatement, end);
 /* fix me: get rid of all type checks / definition checks and let the caller */
 /* handle them? */
-  if (isEndOfStatement) {
-    verifierSetError(vrf, error_expectedConstantSymbol);
-    LOG_ERR("expected constant symbol before end of statement");
-    return;
-  }
+  // if (isEndOfStatement) {
+  //   verifierSetError(vrf, error_expectedConstantSymbol);
+  //   LOG_ERR("expected constant symbol before end of statement");
+  //   return;
+  // }
   symId = verifierGetSymId(vrf, tok);
   if (vrf->err) {
     LOG_ERR("%s is not defined", tok);
     return;
   }
-  if (!verifierIsType(vrf, symId, symType_constant)) {
-    // verifierSetError(vrf, error_expectedConstantSymbol);
-    LOG_ERR("%s is not a constant", tok);
-    return;
-  }
+  // if (!verifierIsType(vrf, symId, symType_constant)) {
+  //   // verifierSetError(vrf, error_expectedConstantSymbol);
+  //   LOG_ERR("%s is not a constant", tok);
+  //   return;
+  // }
   symstringAdd(stmt, symId);
   while (1) {
     tok = verifierParseSymbol(vrf, &isEndOfStatement, end);
@@ -845,38 +849,12 @@ verifierParseVariables(struct verifier* vrf)
   }
 }
 
-/* return the symId of a variable or set isEndOfStatement or set vrf->err */
-// size_t verifierParseDisjoint(struct verifier* vrf, int* isEndOfStatement)
-// {
-//   char* tok;
-//   vrf->err = error_none;
-//   *isEndOfStatement = 0;
-//   readerSkip(vrf->r, whitespace);
-//   tok = readerGetToken(vrf->r, whitespace);
-//   if (strcmp(tok, "$.") == 0) {
-//     *isEndOfStatement = 1;
-//     return 0;
-//   }
-//   size_t symId = verifierGetSymId(vrf, tok);
-//   if (vrf->err) {
-//     LOG_ERR("%s is not defined", tok);
-//   } else if (!verifierIsType(vrf, symId, symType_variable)) {
-//     // verifierSetError(vrf, error_expectedVariableSymbol);
-//     LOG_ERR("%s is not a variable symbol", tok);
-//   } else if (!vrf->symbols.vals[symId].isTyped) {
-//     verifierSetError(vrf, error_untypedVariable);
-//     LOG_ERR("%s must be typed with a $f statement", tok);
-//   }
-//   return symId;
-// }
-
 void
 verifierParseDisjoints(struct verifier* vrf, struct symstring* stmt)
 {
   size_t i;
-  struct symstring vars;
-  verifierParseStatementContent(vrf, &vars, '.');
-  verifierIsTyped(vrf, &vars);
+  verifierParseStatementContent(vrf, stmt, '.');
+  verifierIsTyped(vrf, stmt);
 /* all symbols must be variables */
   for (i = 0; i < stmt->size; i++) {
     verifierIsType(vrf, stmt->vals[i], symType_variable);
@@ -909,6 +887,15 @@ void
 verifierParseAssertion(struct verifier* vrf, struct symstring* stmt)
 {
   verifierParseStatementContent(vrf, stmt, '.');
+  if (stmt->size == 0) {
+    verifierSetError(vrf, error_invalidAssertionStatement);
+    LOG_ERR("an assertion must have at least a constant symbol");
+  }
+  if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
+    verifierSetError(vrf, error_expectedConstantSymbol);
+    LOG_ERR("%s is not a constant symbol",
+      verifierGetSymName(vrf, stmt->vals[0]));
+  }
   verifierIsTyped(vrf, stmt);
 }
 
