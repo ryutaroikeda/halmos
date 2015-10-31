@@ -999,22 +999,28 @@ verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
     return;
   }
   enum symType type = symType_none;
-  struct symstring stmt;
-  symstringInit(&stmt);
   if (keyword[1] == 'f') {
     type = symType_floating;
+    struct symstring stmt;
+    symstringInit(&stmt);
     verifierParseFloating(vrf, &stmt);
     verifierAddFloating(vrf, tok, &stmt);
   } else if (keyword[1] == 'e') {
     type = symType_essential;
+    struct symstring stmt;
+    symstringInit(&stmt);
     verifierParseEssential(vrf, &stmt);
     verifierAddEssential(vrf, tok, &stmt);
   } else if (keyword[1] == 'a') {
     type = symType_assertion;
+    struct symstring stmt;
+    symstringInit(&stmt);
     verifierParseAssertion(vrf, &stmt);
     verifierAddAssertion(vrf, tok, &stmt);
   } else if (keyword[1] == 'p') {
     type = symType_provable;
+    struct symstring stmt;
+    symstringInit(&stmt);
     verifierParseProvable(vrf, &stmt);
     verifierAddProvable(vrf, tok, &stmt);
   }
