@@ -164,17 +164,13 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   struct frame frm;
   struct substitution sub;
   verifierInit(&vrf);
-  verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-   0);
-  verifierAddSymbolExplicit(&vrf, "v2", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-   0);
-  verifierAddSymbolExplicit(&vrf, "v3", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-   0);
-  LOG_INFO("added symbol");
-  size_t v1 = verifierGetSymId(&vrf, "v1");
-  size_t v2 = verifierGetSymId(&vrf, "v2");
-  size_t v3 = verifierGetSymId(&vrf, "v3");
-  ut_assert(!vrf.err, "failed to find symbol");
+  LOG_DEBUG("adding symbols");
+  size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 
+    1, 0, 0, 0, 0, 0, 0, 0);
+  size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
+    1, 0, 0, 0, 0, 0, 0, 0);
+  size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
+    1, 0, 0, 0, 0, 0, 0, 0);
   frameInit(&frm);
   frameAddDisjoint(&frm, v1, v2);
 /* build the substitution */
@@ -221,17 +217,13 @@ Test_verifierIsValidSubstitution(void)
   struct verifier vrf;
   struct substitution sub;
   struct frame frm;
-  size_t v1, v2, v3;
   verifierInit(&vrf);
-  verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-   0);
-  verifierAddSymbolExplicit(&vrf, "v2", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-   0);
-  verifierAddSymbolExplicit(&vrf, "v3", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-   0);
-  v1 = verifierGetSymId(&vrf, "v1");
-  v2 = verifierGetSymId(&vrf, "v2");
-  v3 = verifierGetSymId(&vrf, "v3");
+  size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable,
+    1, 0, 0, 0, 0, 0, 0, 0);
+  size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
+    1, 0, 0, 0, 0, 0, 0, 0);
+  size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
+    1, 0, 0, 0, 0, 0, 0, 0);
   frameInit(&frm);
 /* build the substitution */
   struct symstring str1, str2, str3;
@@ -988,6 +980,43 @@ Test_verifierParseStatement(void)
 }
 
 static int
+Test_verifierParseBlock(void)
+{
+  enum { file_size = 1 };
+  const char* file[file_size] = {
+/* file 0 */
+    "$c |- wff S 0 $. "
+    "${ "
+    "$v x y z w $. "
+    "${ "
+    "$v a b c $. "
+    "$} "
+    "$v a b c $. "
+    "$} "
+    "$v x $. \n",
+  };
+  const enum error errs[file_size] = {
+    error_none,
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+  }
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    verifierBeginReadingFile(&vrf, i);
+    verifierParseBlock(&vrf);
+    check_err(vrf.err, errs[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
 all(void)
 {
   ut_run(Test_frameInit);
@@ -1013,6 +1042,7 @@ all(void)
   ut_run(Test_verifierParseUnlabelledStatement);
   ut_run(Test_verifierParseLabelledStatement);
   ut_run(Test_verifierParseStatement);
+  ut_run(Test_verifierParseBlock);
   return 0;
 }
 

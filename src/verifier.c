@@ -138,9 +138,10 @@ verifierGetSymId(const struct verifier* vrf, const char* sym)
   size_t i;
   DEBUG_ASSERT(sym, "given symbol is NULL");
   for (i = 0; i < vrf->symbols.size; i++) {
-    DEBUG_ASSERT(vrf->symbols.vals[i].sym.vals, 
+    const struct symbol* s = &vrf->symbols.vals[i];
+    DEBUG_ASSERT(s->sym.vals, 
       "symbol from symbol table is NULL");
-    if (strcmp(vrf->symbols.vals[i].sym.vals, sym) == 0) {
+    if ((strcmp(s->sym.vals, sym) == 0) && s->isActive) {
       return i;
     }
   }
@@ -494,7 +495,8 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
       "substitutions", verifierGetSymName(vrf, varId1), 
       verifierGetSymName(vrf, varId2));
   }
-/* check each pair of variables from s1 and s2 have the disjoint variable */
+/* don't do this if there already was an error above. */
+/* Check each pair of variables from s1 and s2 have the disjoint variable */
 /* restriction on them */
   size_t i, j;
   for (i = 0; i < s1.size; i++) {
@@ -1096,13 +1098,10 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
 void
 verifierParseBlock(struct verifier* vrf)
 {
-  int isEndOfScope;
+  int isEndOfScope = 0;
   vrf->scope.vals[vrf->rId]++;
-  while (!vrf->err) {
+  while (!vrf->err && !isEndOfScope) {
     verifierParseStatement(vrf, &isEndOfScope);
-    if (isEndOfScope) {
-      break;
-    }
   }
 /* deactivate local symbols in the current nesting level */
   verifierDeactivateSymbols(vrf);
