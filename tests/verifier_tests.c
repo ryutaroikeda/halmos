@@ -399,21 +399,12 @@ Test_verifierParseSymbol(void)
     check_err(vrf.err, e); \
     verifierClean(&vrf); \
   } while (0)
-  // testfile("$$", error_expectedEndStatement);
-  // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
-  //  isEndOfStatement);
-  // testfile("$..", error_expectedWhitespace);
-  // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
-   // isEndOfStatement);
-  // testfile("$.", error_expectedNewLine);
-  // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
-  //  isEndOfStatement);
   testfile("forced:", error_unterminatedStatement);
   ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
    isEndOfStatement);
-  testfile("bursts$. ", error_invalidSymbol);
-  ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
-   isEndOfStatement);
+  // testfile("bursts$. ", error_invalidSymbol);
+  // ut_assert(isEndOfStatement == 0, "isEndOfStatement is %d, expected 0",
+   // isEndOfStatement);
   testfile("$. ", error_none);
   ut_assert(isEndOfStatement == 1, "isEndOfStatement is %d, expected 1",
    isEndOfStatement);
@@ -472,7 +463,7 @@ do { \
   verifierClean(&vrf); \
 } while (0)
   testparse("", error_unterminatedStatement);
-  testparse("A savage place! as holy and enchanted $.\n", error_none);
+  testparse("A savage place! $( c $) as holy and enchanted $.\n", error_none);
   readerInitString(&r, "savage $.\n");
   charArrayAppend(&r.filename, "file1", 5 + 1);
   verifierInit(&vrf);
@@ -493,7 +484,7 @@ do { \
 static int
 Test_verifierParseVariables(void)
 {
-  char* file = "And here were forests ancient as the hills $.\n";
+  char* file = "And here were $( c $) forests ancient as the hills $.\n";
   struct reader r;
   struct verifier vrf;
   readerInitString(&r, file);
@@ -503,6 +494,8 @@ Test_verifierParseVariables(void)
   vrf.r = &vrf.files.vals[0];
   verifierParseVariables(&vrf);
   check_err(vrf.err, error_none);
+  size_t numvar = vrf.active[symType_variable].vals[0].size;
+  ut_assert(numvar == 8, "parsed %lu variables, should be 8", numvar);
   verifierClean(&vrf);
   return 0;
 }
@@ -870,6 +863,47 @@ Test_verifierParseProvable(void)
 }
 
 static int
+Test_verifierParseUnlabelledStatement(void)
+{
+  enum { file_size = 4 };
+  const char* tok[file_size] = {
+    "$(",
+    "$c",
+    "$v",
+    "$the",
+  };
+  const char* file[file_size] = {
+    "Let us go, through certain $half-deserted streets $) ",
+    "$( the muttering $) retreats $. ",
+    "Of restless nights in one-night cheap hotels $. ",
+    "And sawdust restaurants with oyster-shells: "
+  };
+  const enum error errs[file_size] = {
+    error_none,
+    error_none,
+    error_none,
+    error_invalidKeyword,
+  };
+  size_t i;
+  int isEndOfScope;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+  }
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    verifierBeginReadingFile(&vrf, i);
+    verifierParseUnlabelledStatement(&vrf, &isEndOfScope, tok[i]);
+    check_err(vrf.err, errs[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
 Test_verifierParseLabelledStatement(void)
 {
   enum { file_size = 4 };
@@ -903,34 +937,55 @@ Test_verifierParseLabelledStatement(void)
   return 0;
 }
 
-// static int
-// Test_verifierParseStatement(void)
-// {
-//   enum { file_size = 7 };
-//   const char* file[file_size] = {
-//     "$c |- number 0 1 $( Ring'd with the azure world he stands $) + $. ",
-//     "$v x y $( The wrinkled sea beneath him crawls $) z w $. ",
-//     "num_x $f $( He watches from his mountain walls, $) number x $. ",
-//     "num_y $( And like a thunderbolt he falls. $) $f number y $. ",
-//     "ess $e |- number x + y $. ",
-//     "asr $a |- number x + 0 + y $. ",
-//     "thm $p |- number x + y + 0 + x $= ess num_x asr $. "
-//   };
-//   size_t i;
-//   int isEndOfScope;
-//   struct verifier vrf;
-//   verifierInit(&vrf);
-//   struct reader r[file_size];
-//   for (i = 0; i < file_size; i++) {
-//     readerInitString(&r[i], file[i]);
-//     verifierAddFileExplicit(&vrf, &r[i]);
-//   }
-//   for (i = 0; i < file_size; i++) {
-//     verifierBeginReadingFile(&vrf, i);
-//     verifierParseStatement(&vrf, &isEndOfScope);
+static int
+Test_verifierParseStatement(void)
+{
+  enum { file_size = 11 };
+  const char* file[file_size] = {
+    "$c |- number 0 1 $( Ring'd with the azure world he stands $) + $. ",
+    "$v x y $( The wrinkled sea beneath him crawls $) z w $. ",
+    "num_x $f $( He watches from his mountain walls, $) number x $. ",
+    "num_y $( And like a thunderbolt he falls. $) $f number y $. ",
+    "ess $e |- number x + y $. ",
+    "asr $a |- number x + 0 + y $. ",
+    "thm $p |- number x + y + 0 + x $= ess num_x asr $. ",
+    "$d x y $. ",
+    " ",
+    "$Streets |- that follow $( like $v a tedious argument $. $. ",
+    "$O f insidious intent $. ",
+  };
+  const enum error errs[file_size] = {
+    error_none,
+    error_none,
+    error_none,
+    error_none,
+    error_none,
+    error_none,
+    error_none,
+    error_none,
+    error_expectedNewLine,
+    error_invalidKeyword,
+    error_unexpectedKeyword,
 
-//   }
-// }
+  };
+  size_t i;
+  int isEndOfScope;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+  }
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    verifierBeginReadingFile(&vrf, i);
+    verifierParseStatement(&vrf, &isEndOfScope);
+    check_err(vrf.err, errs[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
 
 static int
 all(void)
@@ -955,7 +1010,9 @@ all(void)
   ut_run(Test_verifierParseProofSymbol);
   ut_run(Test_verifierParseProof);
   ut_run(Test_verifierParseProvable);
+  ut_run(Test_verifierParseUnlabelledStatement);
   ut_run(Test_verifierParseLabelledStatement);
+  ut_run(Test_verifierParseStatement);
   return 0;
 }
 

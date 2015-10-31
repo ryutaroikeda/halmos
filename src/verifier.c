@@ -175,22 +175,6 @@ verifierPrintSym(const struct verifier* vrf, struct charArray* msg,
 }
 
 int
-verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
-{
-  DEBUG_ASSERT(sym, "sym is NULL");
-  size_t symId = verifierGetSymId(vrf, sym);
-  if (symId == symbol_none_id) {
-    return 1;
-  }
-  if (!vrf->symbols.vals[symId].isActive) {
-    return 1;
-  }
-  verifierSetError(vrf, error_duplicateSymbol);
-  LOG_ERR("%s was used before", sym);
-  return 0;
-}
-
-int
 verifierIsFreshFile(const struct verifier* vrf, const char* file)
 {
   DEBUG_ASSERT(file, "file is NULL");
@@ -269,7 +253,18 @@ verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
 size_t
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
 {
-  if (!verifierIsFreshSymbol(vrf, sym)) { return 0; }
+/* check if the symbol is fresh */
+  size_t testId = verifierGetSymId(vrf, sym);
+  if (testId != symbol_none_id) { 
+    verifierSetError(vrf, error_duplicateSymbol);
+    LOG_ERR("%s was used before", sym);
+    return symbol_none_id;
+  }
+  if (strchr(sym, '$')) {
+    verifierSetError(vrf, error_invalidSymbol);
+    LOG_ERR("%s contains $", sym);
+    return symbol_none_id;
+  }
   size_t symId = verifierAddSymbolExplicit(vrf, sym, type, 1, 0,
     vrf->scope.vals[vrf->rId], vrf->stmts.size, vrf->frames.size, vrf->rId,
     vrf->r->line, vrf->r->offset);
@@ -771,11 +766,11 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
     return tok;
   }
 /* check the symbol name does not contain $ */
-  if (strchr(tok, '$')) {
-    verifierSetError(vrf, error_invalidSymbol);
-    LOG_ERR("the symbol %s contains $", tok);
-    return tok;
-  }
+  // if (strchr(tok, '$')) {
+  //   verifierSetError(vrf, error_invalidSymbol);
+  //   LOG_ERR("the symbol %s contains $", tok);
+  //   return tok;
+  // }
   return tok;
 }
 
@@ -810,12 +805,11 @@ verifierParseConstants(struct verifier* vrf)
   vrf->err = error_none;
   int isEndOfStatement;
   char* tok;
-  while (1) {
+  while (!vrf->err) {
     tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
     if (vrf->err) { return; }
     if (isEndOfStatement) { break; }
     verifierAddConstant(vrf, tok);
-    if (vrf->err) { return; }
   }
 }
 
@@ -825,12 +819,11 @@ verifierParseVariables(struct verifier* vrf)
   vrf->err = error_none;
   int isEndOfStatement;
   char* tok;
-  while (1) {
+  while (!vrf->err) {
     tok = verifierParseSymbol(vrf, &isEndOfStatement, '.');
     if (vrf->err) { return; }
     if (isEndOfStatement) { break; }
     verifierAddVariable(vrf, tok);
-    if (vrf->err) { return; }
   }
 }
 
@@ -972,9 +965,43 @@ verifierParseProvable(struct verifier* vrf, struct symstring* stmt)
   verifierParseProof(vrf, stmt);
 }
 
+/* parse $c, $v, or $d statements, or a ${ block. */
+void
+verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
+  const char* tok)
+{
+  size_t len = strlen(tok);
+  if (len != 2) {
+    verifierSetError(vrf, error_invalidKeyword);
+    LOG_ERR("%s is not a keyword", tok);
+    return;
+  }
+  if (tok[1] == 'c') {
+    verifierParseConstants(vrf);
+  } else if (tok[1] == 'v') {
+    verifierParseVariables(vrf);
+  } else if (tok[1] == 'd') {
+    struct symstring stmt;
+    symstringInit(&stmt);
+    verifierParseDisjoints(vrf, &stmt);
+    verifierAddDisjoint(vrf, &stmt);
+  } else if (tok[1] == '{') {
+    verifierParseBlock(vrf);
+  } else if (tok[1] == '}') {
+    *isEndOfScope = 1;
+  } else if (tok[1] == '(') {
+    verifierParseComment(vrf);
+  } else {
+    verifierSetError(vrf, error_unexpectedKeyword);
+    LOG_ERR("expected $c, $v, $d, ${, $} or $( instead of %s", tok);
+  }
+}
+
 /* parse $f, $e, $a, or $p after the label */
 /* to do: error check on $f and handle case when stmt.size != 2, otherwise */
 /* it will trigger an assert */
+/* to do: validate label token */
+/* fix me: get rid of const for tok, because reader will change tok? */
 void
 verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
 {
@@ -1036,13 +1063,15 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
   vrf->err = error_none;
   char* tok;
   *isEndOfScope = 0;
-/* the beginning of the statement. Get the label */
+/* the beginning of the statement. Get the keyword or the label */
   readerSkip(vrf->r, whitespace);
   tok = readerGetToken(vrf->r, whitespace);
-/* check if we are at the end of the current scope or the end of file */
+/* check if we are at the end of file */
   if (vrf->r->err) {
     *isEndOfScope = 1;
 /* the file must end with a new line character */
+/* note: strchr(s, 0) is always true. vrf->r->last is initialized to 0, so */
+/* empty files don't raise this error */
     if (!strchr("\n\f", vrf->r->last)) {
       verifierSetError(vrf, error_expectedNewLine);
       LOG_ERR("expected new line at the end of file");
@@ -1050,35 +1079,18 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
     return;
   }
   if (tok[0] == '$') {
-    size_t len = strlen(tok);
-    if (len != 2) {
-      verifierSetError(vrf, error_invalidKeyword);
-      LOG_ERR("%s is not a keyword", tok);
-      return;
-    }
-    if (tok[1] == 'c') {
-      verifierParseConstants(vrf);
-    } else if (tok[1] == 'v') {
-      verifierParseVariables(vrf);
-    } else if (tok[1] == 'd') {
-      struct symstring stmt;
-      symstringInit(&stmt);
-      verifierParseDisjoints(vrf, &stmt);
-      verifierAddDisjoint(vrf, &stmt);
-    } else if (tok[1] == '{') {
-      verifierParseBlock(vrf);
-    } else if (tok[1] == '}') {
-      *isEndOfScope = 1;
-    } else if (tok[1] == '(') {
-      verifierParseComment(vrf);
-    } else {
-      verifierSetError(vrf, error_unexpectedKeyword);
-      LOG_ERR("expected $c, $v, or $} instead of %s", tok);
-    }
-    return;
-  }
+/* we have a keyword */
+    verifierParseUnlabelledStatement(vrf, isEndOfScope, tok);
+  } else {
 /* we have a label */
-  verifierParseLabelledStatement(vrf, tok);
+/* copy the label, because reader will change tok */
+    struct charArray key;
+    charArrayInit(&key, strlen(tok));
+/* to do: this is error prone. Define a charstring struct */
+    charArrayAppend(&key, tok, strlen(tok) + 1);
+    verifierParseLabelledStatement(vrf, key.vals);
+    charArrayClean(&key);
+  }
 }
 
 void

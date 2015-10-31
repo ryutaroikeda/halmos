@@ -178,6 +178,7 @@ verifierDeactivateSymbols(struct verifier* vrf);
 void
 verifierMakeFrame(struct verifier* vrf, struct frame* frm, 
   const struct symstring* stmt);
+
 int
 verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
  const struct frame* frm, const struct substitution* sub, size_t v1,
@@ -228,6 +229,10 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm);
 
 void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt);
+
+void
+verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
+ const char* tok);
 
 void
 verifierParseLabelledStatement(struct verifier* vrf, const char* tok);
