@@ -422,6 +422,38 @@ Test_verifierParseSymbol(void)
 }
 
 static int
+Test_verifierParseStatementContent(void)
+{
+  enum { file_size = 2 };
+  const char* file[file_size] = {
+    "He clasps the crag with crooked hands $* ",
+    "close to the sun in lonely lands, $* "
+  };
+  const size_t lens[file_size] = {
+    7, 7
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+  }
+  for (i = 0; i < file_size; i++) {
+    struct symstring stmt;
+    symstringInit(&stmt);
+    verifierBeginReadingFile(&vrf, i);
+    verifierParseStatementContent(&vrf, &stmt, '*');
+    ut_assert(stmt.size == lens[i], "parsed %lu items, expected %lu",
+      stmt.size, lens[i]);
+    symstringClean(&stmt);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
 Test_verifierParseConstants(void)
 {
   char* file;
@@ -838,6 +870,69 @@ Test_verifierParseProvable(void)
 }
 
 static int
+Test_verifierParseLabelledStatement(void)
+{
+  enum { file_size = 4 };
+  const char* file[file_size] = {
+    "Let us go then, you and I ",
+    "$( When the evening is spread out against the sky $) $!! ",
+    "$( Like a patient etherized upon a table $) $c ",
+    "$f Let us $. "
+  };
+  const enum error errs[file_size] = {
+    error_expectedKeyword,
+    error_invalidKeyword,
+    error_unexpectedKeyword,
+    error_expectedVariableSymbol
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r[file_size];
+  for (i = 0; i < file_size; i++) {
+    readerInitString(&r[i], file[i]);
+    verifierAddFileExplicit(&vrf, &r[i]);
+  }
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    verifierBeginReadingFile(&vrf, i);
+    verifierParseLabelledStatement(&vrf, "label");
+    check_err(vrf.err, errs[i]);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+// static int
+// Test_verifierParseStatement(void)
+// {
+//   enum { file_size = 7 };
+//   const char* file[file_size] = {
+//     "$c |- number 0 1 $( Ring'd with the azure world he stands $) + $. ",
+//     "$v x y $( The wrinkled sea beneath him crawls $) z w $. ",
+//     "num_x $f $( He watches from his mountain walls, $) number x $. ",
+//     "num_y $( And like a thunderbolt he falls. $) $f number y $. ",
+//     "ess $e |- number x + y $. ",
+//     "asr $a |- number x + 0 + y $. ",
+//     "thm $p |- number x + y + 0 + x $= ess num_x asr $. "
+//   };
+//   size_t i;
+//   int isEndOfScope;
+//   struct verifier vrf;
+//   verifierInit(&vrf);
+//   struct reader r[file_size];
+//   for (i = 0; i < file_size; i++) {
+//     readerInitString(&r[i], file[i]);
+//     verifierAddFileExplicit(&vrf, &r[i]);
+//   }
+//   for (i = 0; i < file_size; i++) {
+//     verifierBeginReadingFile(&vrf, i);
+//     verifierParseStatement(&vrf, &isEndOfScope);
+
+//   }
+// }
+
+static int
 all(void)
 {
   ut_run(Test_frameInit);
@@ -850,6 +945,7 @@ all(void)
   ut_run(Test_verifierUnify);
   ut_run(Test_verifierApplyAssertion);
   ut_run(Test_verifierParseSymbol);
+  ut_run(Test_verifierParseStatementContent);
   ut_run(Test_verifierParseConstants);
   ut_run(Test_verifierParseVariables);
   ut_run(Test_verifierParseDisjoints);
@@ -859,6 +955,7 @@ all(void)
   ut_run(Test_verifierParseProofSymbol);
   ut_run(Test_verifierParseProof);
   ut_run(Test_verifierParseProvable);
+  ut_run(Test_verifierParseLabelledStatement);
   return 0;
 }
 

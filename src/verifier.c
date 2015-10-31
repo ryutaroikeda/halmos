@@ -4,6 +4,8 @@ DEFINE_ARRAY(symbol)
 DEFINE_ARRAY(frame)
 DEFINE_ARRAY(reader)
 
+const size_t symbol_none_id = 0;
+
 void
 symbolInit(struct symbol* sym)
 {
@@ -131,10 +133,9 @@ verifierSetError(struct verifier* vrf, enum error err)
 }
 
 size_t
-verifierGetSymId(struct verifier* vrf, const char* sym)
+verifierGetSymId(const struct verifier* vrf, const char* sym)
 {
   size_t i;
-  vrf->err = error_none;
   DEBUG_ASSERT(sym, "given symbol is NULL");
   for (i = 0; i < vrf->symbols.size; i++) {
     DEBUG_ASSERT(vrf->symbols.vals[i].sym.vals, 
@@ -143,10 +144,9 @@ verifierGetSymId(struct verifier* vrf, const char* sym)
       return i;
     }
   }
-  verifierSetError(vrf, error_undefinedSymbol);
-  LOG_ERR("%s is not defined", sym);
-/* 0 is the symId of symbol_none */
-  return 0;
+  // verifierSetError(vrf, error_undefinedSymbol);
+  // LOG_ERR("%s is not defined", sym);
+  return symbol_none_id;
 }
 
 const char*
@@ -179,8 +179,7 @@ verifierIsFreshSymbol(struct verifier* vrf, const char* sym)
 {
   DEBUG_ASSERT(sym, "sym is NULL");
   size_t symId = verifierGetSymId(vrf, sym);
-  if (vrf->err == error_undefinedSymbol) {
-    vrf->err = error_none;
+  if (symId == symbol_none_id) {
     return 1;
   }
   if (!vrf->symbols.vals[symId].isActive) {
@@ -682,6 +681,7 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
 }
 
 /* check all variables in the statement are typed */
+/* fix me: vrf should be const vrf */
 int
 verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
 {
@@ -796,6 +796,10 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
     DEBUG_ASSERT(tok, "tok is NULL");
     if (isEndOfStatement) { break; }
     symId = verifierGetSymId(vrf, tok);
+    if (symId == symbol_none_id) {
+      verifierSetError(vrf, error_undefinedSymbol);
+      LOG_ERR("%s was not defined", tok);
+    }
     symstringAdd(stmt, symId);
   }
 }
@@ -917,7 +921,11 @@ verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
     return;
   }
   size_t symId = verifierGetSymId(vrf, tok);
-  if (vrf->err) { return; }
+  if (symId == symbol_none_id) { 
+    verifierSetError(vrf, error_undefinedSymbol);
+    LOG_ERR("%s was not defined", tok);
+    return;
+  }
   const struct symbol* sym = &vrf->symbols.vals[symId];
   if ((sym->type == symType_floating) 
     || (sym->type == symType_essential)) {
@@ -964,14 +972,63 @@ verifierParseProvable(struct verifier* vrf, struct symstring* stmt)
   verifierParseProof(vrf, stmt);
 }
 
-/* to do: add symbol after parsing, for $f, $e and $p */
+/* parse $f, $e, $a, or $p after the label */
+/* to do: error check on $f and handle case when stmt.size != 2, otherwise */
+/* it will trigger an assert */
+void
+verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
+{
+  vrf->err = error_none;
+  readerSkip(vrf->r, whitespace);
+  char* keyword = readerGetToken(vrf->r, whitespace);
+  if (keyword[0] != '$') {
+    verifierSetError(vrf, error_expectedKeyword);
+    LOG_ERR("expected a keyword after the label %s instead of %s", tok,
+     keyword);
+    return;
+  }
+  size_t len = strlen(keyword);
+  if (len != 2) {
+    verifierSetError(vrf, error_invalidKeyword);
+    LOG_ERR("%s is not a valid keyword", keyword);
+    return;
+  }
+  if (keyword[1] == '(') {
+    verifierParseComment(vrf);
+    verifierParseLabelledStatement(vrf, tok);
+    return;
+  }
+  enum symType type = symType_none;
+  struct symstring stmt;
+  symstringInit(&stmt);
+  if (keyword[1] == 'f') {
+    type = symType_floating;
+    verifierParseFloating(vrf, &stmt);
+    verifierAddFloating(vrf, tok, &stmt);
+  } else if (keyword[1] == 'e') {
+    type = symType_essential;
+    verifierParseEssential(vrf, &stmt);
+    verifierAddEssential(vrf, tok, &stmt);
+  } else if (keyword[1] == 'a') {
+    type = symType_assertion;
+    verifierParseAssertion(vrf, &stmt);
+    verifierAddAssertion(vrf, tok, &stmt);
+  } else if (keyword[1] == 'p') {
+    type = symType_provable;
+    verifierParseProvable(vrf, &stmt);
+    verifierAddProvable(vrf, tok, &stmt);
+  }
+  if (type == symType_none) {
+    verifierSetError(vrf, error_unexpectedKeyword);
+    LOG_ERR("expected $f, $e, $a, or $p instead of %s", keyword);
+  }
+}
+
 void
 verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
 {
   vrf->err = error_none;
   char* tok;
-  char* keyword;
-  enum symType type = symType_none;
   *isEndOfScope = 0;
 /* the beginning of the statement. Get the label */
   readerSkip(vrf->r, whitespace);
@@ -1014,44 +1071,8 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
     }
     return;
   }
-/* we have a label. Determine the type of statement */
-  readerSkip(vrf->r, whitespace);
-  keyword = readerGetToken(vrf->r, whitespace);
-  if (keyword[0] != '$') {
-    verifierSetError(vrf, error_expectedKeyword);
-    LOG_ERR("expected a keyword after the label %s instead of %s", tok,
-     keyword);
-    return;
-  }
-  size_t len = strlen(keyword);
-  if (len != 2) {
-    verifierSetError(vrf, error_invalidKeyword);
-    LOG_ERR("%s is not a valid keyword", keyword);
-    return;
-  }
-  struct symstring stmt;
-  symstringInit(&stmt);
-  if (keyword[1] == 'f') {
-    type = symType_floating;
-    verifierParseFloating(vrf, &stmt);
-    verifierAddFloating(vrf, tok, &stmt);
-  } else if (keyword[1] == 'e') {
-    type = symType_essential;
-    verifierParseEssential(vrf, &stmt);
-    verifierAddEssential(vrf, tok, &stmt);
-  } else if (keyword[1] == 'a') {
-    type = symType_assertion;
-    verifierParseAssertion(vrf, &stmt);
-    verifierAddAssertion(vrf, tok, &stmt);
-  } else if (keyword[1] == 'p') {
-    type = symType_provable;
-    verifierParseProvable(vrf, &stmt);
-    verifierAddProvable(vrf, tok, &stmt);
-  }
-  if (type == symType_none) {
-    verifierSetError(vrf, error_unexpectedKeyword);
-    LOG_ERR("expected $f, $e, $a, or $p instead of %s", keyword);
-  }
+/* we have a label */
+  verifierParseLabelledStatement(vrf, tok);
 }
 
 void

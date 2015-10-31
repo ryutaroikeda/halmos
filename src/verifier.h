@@ -84,6 +84,7 @@ frameAddDisjoint(struct frame* frm, size_t v1, size_t v2);
 int
 frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2);
 
+extern const size_t symbol_none_id;
 
 struct verifier {
 /* a special symbol with symId 0 */
@@ -117,7 +118,7 @@ void
 verifierClean(struct verifier* vrf);
 
 size_t
-verifierGetSymId(struct verifier* vrf, const char* sym);
+verifierGetSymId(const struct verifier* vrf, const char* sym);
 
 void
 verifierAddFileExplicit(struct verifier* vrf, struct reader* r);
@@ -196,6 +197,10 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId);
 char*
 verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end);
 
+void
+verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
+  char end);
+
 void 
 verifierParseConstants(struct verifier* vrf);
 
@@ -223,6 +228,12 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm);
 
 void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt);
+
+void
+verifierParseLabelledStatement(struct verifier* vrf, const char* tok);
+
+void
+verifierParseStatement(struct verifier* vrf, int* isEndOfScope);
 
 void
 verifierParseBlock(struct verifier* vrf);
