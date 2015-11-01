@@ -81,6 +81,25 @@ frameAddDisjoint(struct frame* frm, size_t v1, size_t v2)
 }
 
 void
+proofInit(struct proof* prf)
+{
+  prf->frm = NULL;
+  symstringInit(&prf->dependencies);
+  symstringArrayInit(&prf->tags, 1);
+}
+
+void
+proofClean(struct proof* prf)
+{
+  size_t i;
+  for (i = 0; i < prf->tags.size; i++) {
+    symstringClean(&prf->tags.vals[i]);
+  }
+  symstringArrayClean(&prf->tags);
+  symstringClean(&prf->dependencies);
+}
+
+void
 verifierInit(struct verifier* vrf)
 {
   size_t i;
@@ -156,9 +175,6 @@ verifierEmptyStack(struct verifier* vrf)
   symstringArrayEmpty(&vrf->stack);
 }
 
-// static const char tokBeginKeyword = '$';
-// static const char tokEndStatement = '.';
-// static const char tokEndComment = ')';
 static const char whitespace[] = " \t\r\f\n";
 
 void
@@ -182,8 +198,6 @@ verifierGetSymId(const struct verifier* vrf, const char* sym)
       return i;
     }
   }
-  // verifierSetError(vrf, error_undefinedSymbol);
-  // LOG_ERR("%s is not defined", sym);
   return symbol_none_id;
 }
 
@@ -768,6 +782,28 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
   symstringArrayClean(&args);
 }
 
+/* apply the label with symId to the current proof. If it is $f or $e, */
+/* we push it to the stack. If it is $a or $p, we apply the assertion and */
+/* push the result */
+void
+verifierApplySymbolToProof(struct verifier* vrf, size_t symId)
+{
+  DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId");
+  const struct symbol* sym = &vrf->symbols.vals[symId];
+  if ((sym->type == symType_floating) 
+    || (sym->type == symType_essential)) {
+/* push floating or essential on the stack */
+    verifierPushSymbol(vrf, symId);
+  } else if ((sym->type == symType_provable) 
+    || (sym->type == symType_assertion)) {
+    verifierApplyAssertion(vrf, symId);
+  } else {
+    H_LOG_ERR(vrf, error_invalidSymbolInProof,
+      "%s is %s statement", verifierGetSymName(vrf, symId),
+      symTypeString(sym->type));
+  }
+}
+
 /* check all variables in the statement are typed */
 /* fix me: vrf should be const vrf */
 int
@@ -1008,19 +1044,7 @@ verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
     LOG_ERR("%s was not defined", tok);
     return;
   }
-  const struct symbol* sym = &vrf->symbols.vals[symId];
-  if ((sym->type == symType_floating) 
-    || (sym->type == symType_essential)) {
-/* push floating or essential on the stack */
-    verifierPushSymbol(vrf, symId);
-  } else if ((sym->type == symType_provable) 
-    || (sym->type == symType_assertion)) {
-    verifierApplyAssertion(vrf, symId);
-  } else {
-    H_LOG_ERR(vrf, error_invalidSymbolInProof,
-      "%s is %s statement", verifierGetSymName(vrf, symId),
-      symTypeString(sym->type));
-  }
+  verifierApplySymbolToProof(vrf, symId);
 }
 
 /* thm is the theorem to prove */
@@ -1053,6 +1077,90 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm)
     charArrayClean(&theorem);
   }
 }
+
+/* collect the dependencies. We are past the left parenthesis */
+// void
+// verifierParseCompressedProofHeader(struct verifier* vrf, struct proof* prf)
+// {
+//   char* tok;
+//   while (1) {
+//     readerSkip(vrf->r, whitespace);
+//     tok = readerGetToken(vrf->r, whitespace);
+//     if (vrf->r->err) { break; }
+//     size_t len = strlen(tok);
+//     if ((len == 1) && (tok[0] == ')')) {
+//       break;
+//     }
+// /* we have a label to add to dependencies */
+//     size_t symId = verifierGetSymId(vrf, tok);
+//     if (symId == symbol_none_id) {
+//       H_LOG_ERR(vrf, error_undefinedSymbol, "%s was not defined", tok);
+//       continue;
+//     }
+//     symstringAdd(&prf->dependencies, symId);
+//   }
+// }
+
+/* get the next number represented in the compressed proof */
+// size_t
+// verifierParseCompressedProofNumber(struct verifier* vrf, int* isEndOfProof)
+// {
+//   vrf->err = error_none;
+//   const char* base20whitespace = "ABCDEFGHIJKLMNOPQRST \t\r\n\f";
+//   // const char* base5whitespace = "UVWXYZ \t\r\n\f";
+//   size_t i, num;
+//   int c;
+//   *isEndOfProof = 0;
+//   while (1) {
+//     readerSkip(vrf->r, whitespace);
+//     c = readerGet(vrf->r);
+//     if (c == '$') {
+//       c = readerGet(vrf->r);
+//       if (c == '.') {
+//         *isEndOfProof = 1;
+//  // note: 0 is unrepresentable in this compression scheme, so it could be 
+// /* used instead of isEndOfProof */
+//         return 0;
+//       }
+// /* disallow comments inside compressed proofs. */
+//     }
+//   }
+
+//   if ((len == 2) && (tok[0] == '$') && (tok[1] == '.')) {
+//     *isEndOfProof = 1;
+
+//     return 0;
+//   }
+// /* compute the base-5 segment */
+//   size_t base5sum = 0;
+//   size_t power5 = 1;
+//   for (i = len; i > 0; i--) {
+// /* hopefully, tok only contains letters U to Y */
+//     size_t b = tok[i - 1] - 'U' + 1;
+//     base5sum += b * power5;
+//     power5 *= 5;
+//   }
+//   base5sum *= 20;
+
+// }
+
+/* return the symId of the label read */
+// size_t
+// verifierParseCompressedProofSymbol(struct verifier* vrf, struct proof* prf)
+// {
+
+// }
+
+// void
+// verifierParseCompressedProof(struct verifier* vrf, 
+//   const struct symstring* thm, const struct frame* frm)
+// {
+//   struct proof prf;
+//   proofInit(&prf);
+//   prf->frm = frm;
+
+//   proofClean(&prf);
+// }
 
 void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt)

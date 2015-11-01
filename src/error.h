@@ -36,6 +36,7 @@ enum error {
   error_invalidSymbolInProof,
   error_unusedTermInProof,
   error_incorrectProof,
+  error_invalidCompressedProof,
   error_invalidFile,
   error_expectedFilename,
   error_unexpectedFilename,

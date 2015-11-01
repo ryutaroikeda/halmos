@@ -1,3 +1,6 @@
 #Halmos
 A verifier for metamath (www.metamath.org)
 
+Differences between Halmos and the metamath specification
+File inclusion with $[ $] will only export global symbols, i.e. $c, $a, and $p
+statements

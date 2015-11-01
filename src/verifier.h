@@ -52,7 +52,7 @@ void symbolInit(struct symbol* sym);
 
 void symbolClean(struct symbol* sym);
 
-/* frame, for assertions and provables */
+/* frame, for assertions and provables. This is not an extended frame */
 struct frame {
 /* indices to verifier->stmts. These are mandatory hypotheses */
   struct size_tArray stmts;
@@ -72,6 +72,22 @@ frameAddDisjoint(struct frame* frm, size_t v1, size_t v2);
 
 int
 frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2);
+
+/* data for processing compressed proofs */
+struct proof {
+/* the frame containing the mandatory hypotheses */
+  struct frame* frm;
+/* labels used in the proof which are not in the mandatory hypothesis */
+  struct symstring dependencies;
+/* tagged proof steps */
+  struct symstringArray tags;
+};
+
+void
+proofInit(struct proof* prf);
+
+void
+proofClean(struct proof* prf);
 
 extern const size_t symbol_none_id;
 
