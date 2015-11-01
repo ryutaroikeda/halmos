@@ -267,6 +267,21 @@ verifierBeginReadingFile(struct verifier* vrf, size_t rId)
   vrf->r = &vrf->files.vals[rId];
 }
 
+/* check the label contains only alphanumeric characters and -, _, and .. */
+int
+verifierIsValidLabel(const struct verifier* vrf, const char* lab)
+{
+  const char* valid = "abcdefghijklmnopqrstuvwxyz"
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.";
+  (void) vrf;
+  size_t i;
+  const size_t len = strlen(lab);
+  for (i = 0; i < len; i++) {
+    if (!strchr(valid, lab[i])) { return 0; }
+  }
+  return 1;
+}
+
 size_t
 verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
  enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
@@ -304,6 +319,14 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
     verifierSetError(vrf, error_invalidSymbol);
     LOG_ERR("%s contains $", sym);
     return symbol_none_id;
+  }
+  if ((type == symType_floating) || (type == symType_essential)
+    || (type == symType_assertion) || (type == symType_provable)) {
+    if (!verifierIsValidLabel(vrf, sym)) {
+      H_LOG_ERR(vrf, error_invalidLabel,
+        "label %s contains an invalid character", sym);
+      return symbol_none_id;
+    }
   }
   size_t symId = verifierAddSymbolExplicit(vrf, sym, type, 1, 0,
     vrf->scope.vals[vrf->rId], vrf->stmts.size, vrf->frames.size, vrf->rId,
@@ -368,11 +391,11 @@ size_t
 verifierAddFloating(struct verifier* vrf, const char* sym, 
   struct symstring* stmt)
 {
-  DEBUG_ASSERT(stmt->size == 2, "floating has size %lu, must be 2",
-    stmt->size);
   size_t symId = verifierAddSymbol(vrf, sym, symType_floating);
   vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, stmt);
-  vrf->symbols.vals[stmt->vals[1]].isTyped = 1;
+  if (stmt->size >= 2) {
+    vrf->symbols.vals[stmt->vals[1]].isTyped = 1;
+  }
   return symId;
 }
 
@@ -511,6 +534,17 @@ verifierMakeFrame(struct verifier* vrf, struct frame* frm,
 }
 
 /* v1 and v2 are indices into sub->vars */
+/* From the metamath specification: */
+/* */
+/* Each substitution made in a proof must be checked to verify that any */
+/* disjoint variable restrictions are satisfied, as follows. */
+/* If two variables replaced by a substitution exist in a mandatory $d */
+/* statement of the assertion referenced, the two expressions resulting */
+/* from the substitution must meet satisfy the following conditions. */
+/* First, the two ex- pressions must have no variables in common. Second, */
+/* each possible pair of variables, one from each expression, must exist in */
+/* an active $d statement of the $p statement containing the proof. */
+/* */
 int
 verifierIsValidDisjointPairSubstitution(struct verifier* vrf, 
   const struct frame* frm, const struct substitution* sub, size_t v1,
@@ -533,10 +567,10 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
 /* check the substitution has no common variables */
   verifierGetVariables(vrf, &s1, &sub->subs.vals[v1]);
   verifierGetVariables(vrf, &s2, &sub->subs.vals[v2]);
-  if (symstringIsIntersecting(&s1, &s2)) { 
-    verifierSetError(vrf, error_invalidSubstitutionOfDisjoint);
-/* to do: pretty-print the intersecting set */
-    LOG_ERR("disjoint variables %s and %s share a variable in their " 
+  if (symstringIsIntersecting(&s1, &s2)) {
+  /* to do: pretty-print the intersecting set */
+    H_LOG_ERR(vrf, error_invalidSubstitutionOfDisjoint,
+      "disjoint variables %s and %s share a variable in their " 
       "substitutions", verifierGetSymName(vrf, varId1), 
       verifierGetSymName(vrf, varId2));
   }
@@ -548,8 +582,8 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
     if (vrf->err) { break; }
     for (j = 0; j < s2.size; j++) {
       if (!frameAreDisjoint(frm, s1.vals[i], s2.vals[j])) {
-        verifierSetError(vrf, error_missingDisjointRestriction);
-        LOG_ERR("the variables %s and %s should be disjoint", 
+        H_LOG_ERR(vrf, error_missingDisjointRestriction,
+        "the variables %s and %s should be disjoint", 
           verifierGetSymName(vrf, s1.vals[i]),
           verifierGetSymName(vrf, s2.vals[j]));
         break;
@@ -618,8 +652,14 @@ void
 verifierUnify(struct verifier* vrf, struct substitution* sub,
  const struct symstring* a, const struct symstring* floating)
 {
-  DEBUG_ASSERT(floating->size == 2, "floating has size %lu, should be 2", 
-    floating->size);
+  if (floating->size != 2) {
+    struct charArray ca;
+    charArrayInit(&ca, 1);
+    H_LOG_ERR(vrf, error_invalidFloatingStatement,
+     "cannot unify with an invalid floating statement %s",
+     verifierPrintSym(vrf, &ca, floating));
+    return;
+  }
   DEBUG_ASSERT(a->size >= 1, "cannot unify empty string");
   if (a->vals[0] != floating->vals[0]) {
     verifierSetError(vrf, error_mismatchedType);
@@ -803,8 +843,8 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
       verifierParseComment(vrf);
       return verifierParseSymbol(vrf, isEndOfStatement, end);
     } else {
-      verifierSetError(vrf, error_unexpectedKeyword);
-      LOG_ERR("expected $%c or $( instead of %s", end, tok);
+      H_LOG_ERR(vrf, error_unexpectedKeyword,
+        "expected $%c or $( instead of %s", end, tok);
     }
     return tok;
   }
@@ -896,8 +936,8 @@ verifierParseFloating(struct verifier* vrf, struct symstring* stmt)
 {
   verifierParseStatementContent(vrf, stmt, '.');
   if (stmt->size != 2) {
-    verifierSetError(vrf, error_invalidFloatingStatement);
-    LOG_ERR("floating statement has size %lu, expected 2", stmt->size);
+    H_LOG_ERR(vrf, error_invalidFloatingStatement,
+      "invalid floating statement has size %lu, expected 2", stmt->size);
     return;
   }
   DEBUG_ASSERT(stmt->vals[0] < vrf->symbols.size, "invalid symId at vals[0]");
@@ -1192,7 +1232,7 @@ verifierParseBlock(struct verifier* vrf)
 {
   int isEndOfScope = 0;
   vrf->scope.vals[vrf->rId]++;
-  while (!vrf->err && !isEndOfScope) {
+  while (!isEndOfScope) {
     verifierParseStatement(vrf, &isEndOfScope);
   }
 /* deactivate local symbols in the current nesting level */

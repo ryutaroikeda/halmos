@@ -52,19 +52,7 @@ void symbolInit(struct symbol* sym);
 
 void symbolClean(struct symbol* sym);
 
-// struct statement {
-/* indices to verifier->symbols */
-  // struct symstring syms;
-/* 1 if it is a mandatory hypothesis */
-/* fix me: how does this work? This should be in frame */
-/* int isMandatory; */
-// };
-
-// void statementInit(struct statement* stmt);
-
-// void statementClean(struct statement* stmt);
-
-/* frame */
+/* frame, for assertions and provables */
 struct frame {
 /* indices to verifier->stmts. These are mandatory hypotheses */
   struct size_tArray stmts;

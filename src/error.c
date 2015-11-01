@@ -20,6 +20,7 @@ static const char* errorStrings[error_size] = {
   "unterminatedStatement",
   "untypedVariable",
   "invalidSymbol",
+  "invalidLabel",
   "undefinedSymbol",
   "duplicateSymbol",
   "duplicateFile",

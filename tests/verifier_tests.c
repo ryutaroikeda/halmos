@@ -1126,7 +1126,9 @@ Test_verifierParseFileExplicit(void)
   };
   const enum error errs[file_size] = {
     error_invalidFile,
-    error_expectedFilename,
+/* this error is hidden by the ParseBlock loop, but is emitted */
+/*    error_expectedFilename, */
+    error_none,
     error_none
   };
   size_t i;

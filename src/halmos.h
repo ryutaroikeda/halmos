@@ -3,8 +3,16 @@
 
 #include "verifier.h"
 
+enum halmosflag {
+  halmosflag_none,
+  halmosflag_verbose,
+  halmosflag_summary,
+  halmosflag_size
+};
+
 struct halmos {
   struct verifier vrf;
+  char flags[halmosflag_size];
 };
 
 void

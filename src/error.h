@@ -20,6 +20,7 @@ enum error {
   error_unterminatedStatement,
   error_untypedVariable,
   error_invalidSymbol,
+  error_invalidLabel,
   error_undefinedSymbol,
   error_duplicateSymbol,
   error_duplicateFile,
