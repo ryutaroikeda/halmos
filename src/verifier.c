@@ -146,6 +146,16 @@ verifierClean(struct verifier* vrf)
   vrf->r = NULL;
 }
 
+void
+verifierEmptyStack(struct verifier* vrf)
+{
+  size_t i;
+  for (i = 0; i < vrf->stack.size; i++) {
+    symstringClean(&vrf->stack.vals[i]);
+  }
+  symstringArrayEmpty(&vrf->stack);
+}
+
 // static const char tokBeginKeyword = '$';
 // static const char tokEndStatement = '.';
 // static const char tokEndComment = ')';
@@ -979,7 +989,7 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm)
 {
   vrf->err = error_none;
   int isEndOfProof = 0;
-  symstringArrayEmpty(&vrf->stack);
+  verifierEmptyStack(vrf);
   while (!vrf->err && !isEndOfProof) {
     verifierParseProofSymbol(vrf, &isEndOfProof);
   }

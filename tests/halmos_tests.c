@@ -8,6 +8,7 @@ static int test_ ## filename(void) \
   halmosCompile(&h, "tests/" #filename ".mm"); \
   ut_assert(h.vrf.errc == count, "got %lu errors, expected %d", \
     h.vrf.errc, count); \
+  halmosClean(&h); \
   return 0; \
 }
 

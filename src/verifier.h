@@ -123,6 +123,9 @@ verifierInit(struct verifier* vrf);
 void
 verifierClean(struct verifier* vrf);
 
+void
+verifierEmptyStack(struct verifier* vrf);
+
 size_t
 verifierGetSymId(const struct verifier* vrf, const char* sym);
 
