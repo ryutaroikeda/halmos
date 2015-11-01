@@ -13,8 +13,21 @@ do { \
   fprintf(stderr, "\n"); \
 } while (0)
 
+/* use this for reporting general errors not associated with file content */
+#define G_LOG(vrf, err, lab, ...) \
+do { \
+  verifierSetError(vrf, err); \
+  fprintf(stderr, lab " [%s] ", errorString(err)); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+} while (0)
+
 #define H_LOG_ERR(vrf, err, ...) H_LOG(vrf, err, "error", __VA_ARGS__)
 
 #define H_LOG_WARN(vrf, err, ...) H_LOG(vrf, err, "warning", __VA_ARGS__)
+
+#define G_LOG_ERR(vrf, err, ...) G_LOG(vrf, err, "error", __VA_ARGS__)
+
+#define G_LOG_WARN(vrf, err, ...) G_LOG(vrf, err, "warning", __VA_ARGS__)
 
 #endif

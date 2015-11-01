@@ -1,11 +1,6 @@
 #include "dbg.h"
 #include "halmos.h"
-#include "verifier.h"
 #include <stdio.h>
-
-struct halmos {
-  struct verifier vrf;
-};
 
 void
 halmosInit(struct halmos* h)
@@ -22,16 +17,7 @@ halmosClean(struct halmos* h)
 void
 halmosCompile(struct halmos* h, const char* filename)
 {
-  FILE* f = fopen(filename, "r");
-  if (!f) {
-    LOG_ERR("could not open file %s", filename);
-    return;
-  }
-  struct reader r;
-  readerInitFile(&r, f, filename);
-  size_t rId = verifierAddFile(&h->vrf, &r);
-  verifierBeginReadingFile(&h->vrf, rId);
-  verifierParseBlock(&h->vrf);
+  verifierParseFile(&h->vrf, filename);
   printf("Found %lu errors\n", h->vrf.errc);
 }
 

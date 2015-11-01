@@ -5,6 +5,23 @@ DEFINE_ARRAY(symbol)
 DEFINE_ARRAY(frame)
 DEFINE_ARRAY(reader)
 
+const char* symTypeStrings[symType_size] = {
+  "none",
+  "constant",
+  "variable",
+  "disjoint",
+  "floating",
+  "essential",
+  "assertion",
+  "provable"
+};
+
+const char*
+symTypeString(enum symType type)
+{
+  return symTypeStrings[type];
+}
+
 const size_t symbol_none_id = 0;
 
 void
@@ -634,15 +651,16 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
     if (vrf->err) { break; }
     symstringArrayAdd(&args, str);
   }
-/* get the patterns to match with the arguments. */
-/* frm->stmts are in reverse order */
+/* get the patterns to match with the arguments, i.e. the mandatory */
+/* hypotheses of the assertion */
+/* note: frm->stmts are in reverse order */
   struct symstringArray pats;
   symstringArrayInit(&pats, 1);
   for (i = 0; i < argc; i++) {
     struct symstring str;
     symstringInit(&str);
-    size_t symId = frm->stmts.vals[i];
-    size_t stmtId = vrf->symbols.vals[symId].stmt;
+    size_t frmSymId = frm->stmts.vals[i];
+    size_t stmtId = vrf->symbols.vals[frmSymId].stmt;
     symstringAppend(&str, &vrf->stmts.vals[stmtId]);
     symstringArrayAdd(&pats, str);
   }
@@ -948,9 +966,10 @@ verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
   } else if ((sym->type == symType_provable) 
     || (sym->type == symType_assertion)) {
     verifierApplyAssertion(vrf, symId);
-  } else {   
-    verifierSetError(vrf, error_invalidSymbolInProof);
-    LOG_ERR("symbols in proofs must be $f, $e, $a, or $p");
+  } else {
+    H_LOG_ERR(vrf, error_invalidSymbolInProof,
+      "%s is %s statement", verifierGetSymName(vrf, symId),
+      symTypeString(sym->type));
   }
 }
 
@@ -960,6 +979,7 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm)
 {
   vrf->err = error_none;
   int isEndOfProof = 0;
+  symstringArrayEmpty(&vrf->stack);
   while (!vrf->err && !isEndOfProof) {
     verifierParseProofSymbol(vrf, &isEndOfProof);
   }
@@ -992,6 +1012,37 @@ verifierParseProvable(struct verifier* vrf, struct symstring* stmt)
   verifierParseProof(vrf, stmt);
 }
 
+void
+verifierParseFileInclusion(struct verifier* vrf) {
+  vrf->err = error_none;
+  char* tok;
+  int isEndOfStatement = 0;
+  tok = verifierParseSymbol(vrf, &isEndOfStatement, ']');
+  if (vrf->r->err || isEndOfStatement) {
+    H_LOG_ERR(vrf, error_expectedFilename, "a filename is required after $[");
+    return;
+  }
+  struct charArray filename;
+  charArrayInit(&filename, strlen(tok) + 1);
+  charArrayAppend(&filename, tok, strlen(tok) + 1);
+/* go to the end of the file inclusion statement */
+  int foundMoreFiles = 0;
+  while (!vrf->err) {
+    tok = verifierParseSymbol(vrf, &isEndOfStatement, ']');
+    if (isEndOfStatement) { break; }
+    if (!foundMoreFiles) {
+      H_LOG_ERR(vrf, error_unexpectedFilename,
+        "cannot include %s. Only one filename can be stated in $[ $]",
+        filename.vals);
+      foundMoreFiles = 1;
+    }
+  }
+  if (readerIsFile(vrf->r)) {
+    verifierParseFileExplicit(vrf, filename.vals, "f");
+  }
+  charArrayClean(&filename);
+}
+
 /* parse $c, $v, or $d statements, or a ${ block. */
 void
 verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
@@ -1018,6 +1069,8 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
     *isEndOfScope = 1;
   } else if (tok[1] == '(') {
     verifierParseComment(vrf);
+  } else if (tok[1] == '[') {
+    verifierParseFileInclusion(vrf);
   } else {
     verifierSetError(vrf, error_unexpectedKeyword);
     LOG_ERR("expected $c, $v, $d, ${, $} or $( instead of %s", tok);
@@ -1136,4 +1189,36 @@ verifierParseBlock(struct verifier* vrf)
   verifierDeactivateSymbols(vrf);
 /* go back to the previous nesting level */
   vrf->scope.vals[vrf->rId]--;
+}
+
+void
+verifierParseFileExplicit(struct verifier* vrf, const char* filename,
+  const char* mode)
+{
+  vrf->err = error_none;
+  if (!verifierIsFreshFile(vrf, filename)) {
+/* we've opened this file before, so ignore it */
+    return;
+  }
+/* the current rId. If no file is being read, rId can be arbitrary */
+  size_t rId = vrf->rId;
+  struct reader r;
+  readerOpen(&r, filename, mode);
+  if (r.err) {
+    G_LOG_ERR(vrf, error_invalidFile, "could not open file %s", filename);
+    return;
+  }
+  size_t thisFile = verifierAddFile(vrf, &r);
+  verifierBeginReadingFile(vrf, thisFile);
+  verifierParseBlock(vrf);
+/* close the file */
+  readerClose(&r);
+/* go back to reading the original file */
+  vrf->rId = rId;
+}
+
+void
+verifierParseFile(struct verifier* vrf, const char* filename)
+{
+  verifierParseFileExplicit(vrf, filename, "f");
 }

@@ -3,8 +3,13 @@
 
 enum error {
   error_none = 0,
+/* internal errors */
   error_endOfString,
   error_endOfFile,
+  error_failedFileOpen,
+  error_failedFileClose,
+  error_invalidReaderMode,
+/* external (user) errors */
   error_expectedNewLine,
   error_expectedConstantSymbol,
   error_expectedVariableSymbol,
@@ -30,6 +35,9 @@ enum error {
   error_invalidSymbolInProof,
   error_unusedTermInProof,
   error_incorrectProof,
+  error_invalidFile,
+  error_expectedFilename,
+  error_unexpectedFilename,
   error_size
 };
 

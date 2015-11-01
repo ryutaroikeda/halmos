@@ -2,7 +2,8 @@
 #include "reader.h"
 #include <string.h>
 
-static int Test_readerGet(void)
+static int
+Test_readerGet(void)
 {
   int c;
   const char s[60] =
@@ -34,7 +35,8 @@ static int Test_readerGet(void)
   return 0;
 }
 
-static int Test_readerGetToken(void)
+static int
+Test_readerGetToken(void)
 {
   const char s[] = 
   "Where Alph, the sacred river, ran\n"
@@ -45,12 +47,14 @@ static int Test_readerGetToken(void)
   readerGetToken(&r, " ");
   ut_assert(r.err == error_none, "err == %s, expected None",
     errorString(r.err));
-  ut_assert(strcmp(r.tok.vals, "Where") == 0, "tok == %s, expected Where", r.tok.vals);
+  ut_assert(strcmp(r.tok.vals, "Where") == 0,
+    "tok == %s, expected Where", r.tok.vals);
   // ut_assert(r.last == 'e', "last == %c, expected e", r.last);
   readerGetToken(&r, " ,");
   ut_assert(r.err == error_none, "err == %s, expected None",
     errorString(r.err));
-  ut_assert(strcmp(r.tok.vals, "Alph") == 0, "tok == %s, expected Alph", r.tok.vals);
+  ut_assert(strcmp(r.tok.vals, "Alph") == 0,
+    "tok == %s, expected Alph", r.tok.vals);
   // ut_assert(r.last == 'h', "last == %c, expected h", r.last);
   readerGetToken(&r, "$");
   // ut_assert(r.last == '.', "last == %c, expected '.'", r.last);
@@ -72,7 +76,8 @@ static int Test_readerGetToken(void)
   return 0;
 }
 
-static int Test_readerSkip(void)
+static int
+Test_readerSkip(void)
 {
   int c;
   const char f[] =
@@ -96,7 +101,8 @@ static int Test_readerSkip(void)
   return 0;
 }
 
-static int Test_readerFind(void)
+static int
+Test_readerFind(void)
 {
   int c;
   const char f[] =
@@ -113,12 +119,37 @@ static int Test_readerFind(void)
   return 0;
 }
 
-static int all()
+static int
+Test_readerOpen(void)
+{
+  const char* filename = "To lead you to an overwhelming question ...";
+  struct reader r;
+  readerOpen(&r, filename, "s");
+  ut_assert(r.err == error_none, "err = %s, expected none",
+    errorString(r.err));
+  return 0;
+}
+
+static int
+Test_readerClose(void)
+{
+  struct reader r;
+  readerOpen(&r, "Oh, do not ask, \"What is it?\"", "s");
+  readerClose(&r);
+  ut_assert(r.err == error_none, "err = %s, expected none",
+    errorString(r.err));
+  return 0;
+}
+
+static int
+all()
 {
   ut_run(Test_readerGet);
   ut_run(Test_readerGetToken);
   ut_run(Test_readerSkip);
   ut_run(Test_readerFind);
+  ut_run(Test_readerOpen);
+  ut_run(Test_readerClose);
   return 0;
 }
 

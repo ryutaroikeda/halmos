@@ -26,6 +26,8 @@ enum symType {
   symType_size
 };
 
+const char* symTypeString(enum symType type);
+
 struct symbol {
   struct charArray sym;
   enum symType type;
@@ -239,6 +241,9 @@ void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt);
 
 void
+verifierParseFileInclusion(struct verifier* vrf);
+
+void
 verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
  const char* tok);
 
@@ -250,5 +255,12 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope);
 
 void
 verifierParseBlock(struct verifier* vrf);
+
+void
+verifierParseFileExplicit(struct verifier* vrf, const char* filename,
+  const char* mode);
+
+void
+verifierParseFile(struct verifier* vrf, const char* filename);
 
 #endif

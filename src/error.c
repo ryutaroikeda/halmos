@@ -1,9 +1,15 @@
 #include "error.h"
 
+/* check this matches with enum error in error.h by looking at line number */
 static const char* errorStrings[error_size] = {
   "none",
+/* internal errors */
   "endOfString",
   "endOfFile",
+  "failedFileOpen",
+  "failedFileClose",
+  "invalidReaderMode",
+/* external (user) errors */
   "expectedNewLine",
   "expectedConstantSymbol",
   "expectedVariableSymbol",
@@ -28,7 +34,11 @@ static const char* errorStrings[error_size] = {
   "missingDisjointRestriction",
   "invalidSymbolInProof",
   "unusedTermInProof",
-  "incorrectProof"
+  "incorrectProof",
+  "invalidFile",
+  "expectedFilename",
+  "unexpectedFilename"
+/* error_size */
 };
 
 const char*

@@ -2,6 +2,10 @@
 #include "reader.h"
 #include <string.h>
 
+static const int mode_none = 0;
+static const int mode_string = 1;
+static const int mode_file = 2;
+
 int
 readerGetString(struct reader* r)
 {
@@ -33,6 +37,7 @@ readerInit(struct reader* r)
   r->skipped = 0;
   r->didSkip = 0;
   r->last = 0;
+  r->mode = mode_none;
   r->get = NULL;
   r->err = error_none;
 }
@@ -43,6 +48,7 @@ readerInitString(struct reader* r, const char* s)
   readerInit(r);
   charArrayAppend(&r->filename, "", 1);
   r->stream.s = s;
+  r->mode = mode_string;
   r->get = &readerGetString;
 }
 
@@ -52,6 +58,7 @@ readerInitFile(struct reader* r, FILE* f, const char* filename)
   readerInit(r);
   charArrayAppend(&r->filename , filename, strlen(filename) + 1);
   r->stream.f = f;
+  r->mode = mode_file;
   r->get = &readerGetFile;
 }
 
@@ -136,4 +143,46 @@ void
 readerFind(struct reader* r, const char* find)
 {
   readerSkipExplicit(r, find, 0);
+}
+
+void
+readerOpen(struct reader* r, const char* filename, const char* mode)
+{
+  DEBUG_ASSERT(filename, "filename is NULL");
+  DEBUG_ASSERT(mode, "mode is NULL");
+  r->err = error_none;
+  if (strcmp(mode, "f") == 0) {
+    FILE* f = fopen(filename, "r");
+    if (!f) {
+      r->err = error_failedFileOpen;
+      return;
+    }
+    readerInitFile(r, f, filename);
+  } else if (strcmp(mode, "s") == 0) {
+    readerInitString(r, filename);
+  } else {
+    r->err = error_invalidReaderMode;
+  }
+}
+
+void
+readerClose(struct reader* r)
+{
+  r->err = error_none;
+  if (r->mode != mode_file) { return; }
+  if (fclose(r->stream.f) != 0) {
+    r->err = error_failedFileClose;
+  }
+}
+
+int
+readerIsString(const struct reader* r)
+{
+  return r->mode == mode_string;
+}
+
+int
+readerIsFile(const struct reader* r)
+{
+  return r->mode == mode_file;
 }

@@ -1,5 +1,5 @@
 DEBUGGER=valgrind
-CFLAGS=-g -std=c99 -Wextra -Wall -pedantic -Werror -Isrc $(OPTFLAGS)
+CFLAGS=-g -std=c99 -Wextra -Wall -pedantic -Werror -Wshadow -Isrc $(OPTFLAGS)
 LIBS=$(OPTLIBS)
 
 SOURCES:=$(wildcard src/*.c)

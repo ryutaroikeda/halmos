@@ -911,6 +911,38 @@ Test_verifierParseProvable(void)
 }
 
 static int
+Test_verifierParseFileInclusion(void)
+{
+  enum { file_size = 3 };
+  const char* files[file_size] = {
+/* the filename must not contain spaces */
+    "Intheroomthewomencomeandgo $] ",
+    "Talking of Michelangelo. $] ",
+    "$] "
+  };
+  const enum error errs[file_size] = {
+    error_none,
+    error_unexpectedFilename,
+    error_expectedFilename,
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r;
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+    readerOpen(&r, files[i], "s");
+    size_t rId = verifierAddFileExplicit(&vrf, &r);
+    verifierBeginReadingFile(&vrf, rId);
+    verifierParseFileInclusion(&vrf);
+    check_err(vrf.err, errs[i]);
+    readerClose(&r);
+  }
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
 Test_verifierParseUnlabelledStatement(void)
 {
   enum { file_size = 4 };
@@ -1049,28 +1081,66 @@ Test_verifierParseBlock(void)
     "$v a b c $. "
     "$} "
     "$v x $. \n",
-/* file 1 */
-    "",
+/* file 1 - parse two proofs */
+    "$c |- num 0 S $. "
+    "$v x $. "
+    "a.num.0 $a num 0 $. "
+    "num.x $f num x $. "
+    "a.num.succ $a num S x $. "
+    "thm.one $p num S 0 $= a.num.0 a.num.succ $. "
+    "thm.succ2 $p num S S x $= num.x a.num.succ a.num.succ $.\n"
   };
   const enum error errs[file_size] = {
     error_none,
     error_none,
   };
   size_t i;
-  struct verifier vrf;
-  verifierInit(&vrf);
-  struct reader r[file_size];
-  for (i = 0; i < file_size; i++) {
-    readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
-  }
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
-    verifierBeginReadingFile(&vrf, i);
+    struct verifier vrf;
+    verifierInit(&vrf);
+    struct reader r;
+    readerInitString(&r, file[i]);
+    size_t rId = verifierAddFileExplicit(&vrf, &r);
+    verifierBeginReadingFile(&vrf, rId);
     verifierParseBlock(&vrf);
     check_err(vrf.err, errs[i]);
+    verifierClean(&vrf);
   }
-  verifierClean(&vrf);
+  return 0;
+}
+
+static int
+Test_verifierParseFileExplicit(void)
+{
+  enum { file_size = 3 };
+  const char* files[file_size] = {
+    "",
+    "$[ $]\n",
+    "$[ j_alfred_prufrock $] \n"
+  };
+  const char* modes[file_size] = {
+    "invalidMode",
+    "s",
+    "s"
+  };
+  const enum error errs[file_size] = {
+    error_invalidFile,
+    error_expectedFilename,
+    error_none
+  };
+  size_t i;
+/* to do: test recursive file inclusion; or should that be done from */
+/* frontend? */
+  for (i = 0; i < file_size; i++) {
+    LOG_DEBUG("testing file %lu", i);
+/* use a fresh verifier to bypass duplicate file error */
+    struct verifier vrf;
+    verifierInit(&vrf);
+    verifierParseFileExplicit(&vrf, files[i], modes[i]);
+    check_err(vrf.err, errs[i]);
+    verifierClean(&vrf);
+  }
   return 0;
 }
 
@@ -1098,10 +1168,12 @@ all(void)
   ut_run(Test_verifierParseProofSymbol);
   ut_run(Test_verifierParseProof);
   ut_run(Test_verifierParseProvable);
+  ut_run(Test_verifierParseFileInclusion);
   ut_run(Test_verifierParseUnlabelledStatement);
   ut_run(Test_verifierParseLabelledStatement);
   ut_run(Test_verifierParseStatement);
   ut_run(Test_verifierParseBlock);
+  ut_run(Test_verifierParseFileExplicit);
   return 0;
 }
 
