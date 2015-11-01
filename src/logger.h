@@ -22,6 +22,16 @@ do { \
   fprintf(stderr, "\n"); \
 } while (0)
 
+/* logging for the preprocessor */
+#define P_LOG(p, err, lab, ...) \
+do { \
+  preprocSetError(p, err); \
+  fprintf(stderr, "%s:%lu:%lu " lab " [%s] ", \
+    p->r->filename.vals, p->r->line, p->r->offset, errorString(err)); \
+  fprintf(stderr, __VA_ARGS__); \
+  fprintf(stderr, "\n"); \
+} while (0)
+
 #define H_LOG_ERR(vrf, err, ...) H_LOG(vrf, err, "error", __VA_ARGS__)
 
 #define H_LOG_WARN(vrf, err, ...) H_LOG(vrf, err, "warning", __VA_ARGS__)
@@ -29,5 +39,9 @@ do { \
 #define G_LOG_ERR(vrf, err, ...) G_LOG(vrf, err, "error", __VA_ARGS__)
 
 #define G_LOG_WARN(vrf, err, ...) G_LOG(vrf, err, "warning", __VA_ARGS__)
+
+#define P_LOG_ERR(p, err, ...) P_LOG(p, err, "error", __VA_ARGS__)
+
+#define P_LOG_WARN(p, err, ...) P_LOG(p, err, "warning", __VA_ARGS__)
 
 #endif

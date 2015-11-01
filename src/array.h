@@ -2,9 +2,7 @@
 #define _HALMOSARRAY_H_
 
 #include "dbg.h"
-
-void* xmalloc(size_t size);
-void* xrealloc(void* p, size_t size);
+#include "memory.h"
 
 #define DECLARE_ARRAY(type) \
 struct type ## Array { \

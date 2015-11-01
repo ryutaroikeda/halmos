@@ -1,18 +1,22 @@
 #ifndef _HALMOSHALMOS_H_
 #define _HALMOSHALMOS_H_
 
+#include "preproc.h"
 #include "verifier.h"
 
 enum halmosflag {
-  halmosflag_none,
+  halmosflag_none = 0,
   halmosflag_verbose,
   halmosflag_summary,
+  halmosflag_preproc,
   halmosflag_size
 };
 
 struct halmos {
   struct verifier vrf;
+  struct preproc p;
   char flags[halmosflag_size];
+  char** flagsArgv[halmosflag_size];
 };
 
 void
