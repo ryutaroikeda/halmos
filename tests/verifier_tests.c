@@ -70,9 +70,47 @@ Test_verifierAddDisjoint(void)
   verifierBeginReadingFile(&vrf, 0);
   verifierAddDisjoint(&vrf, &d);
   check_err(vrf.err, error_none);
-  size_t size = vrf.active[symType_disjoint].vals[0].size;
+  size_t size = vrf.symCount[symType_disjoint];
   ut_assert(size == 10, 
     "added %lu disjoint pairs, expected 10", size);
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
+Test_verifierGetVariables(void)
+{
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r;
+  readerInitString(&r, "");
+  verifierAddFile(&vrf, &r);
+  verifierBeginReadingFile(&vrf, 0);
+  size_t zero = verifierAddConstant(&vrf, "0");
+  size_t x = verifierAddVariable(&vrf, "x");
+  size_t y = verifierAddVariable(&vrf, "y");
+  size_t z = verifierAddVariable(&vrf, "z");
+  struct symstring stmt;
+  symstringInit(&stmt);
+  symstringAdd(&stmt, zero);
+  symstringAdd(&stmt, x);
+  symstringAdd(&stmt, y);
+  struct symstring stmt2;
+  symstringInit(&stmt2);
+  symstringAdd(&stmt2, zero);
+  symstringAdd(&stmt2, z);
+  struct symstring set;
+  symstringInit(&set);
+  verifierGetVariables(&vrf, &set, &stmt);
+  check_err(vrf.err, error_none);
+  ut_assert(set.size == 2, "set size = %lu, expected 2", set.size);
+/* check we don't add duplicate symbols */
+  verifierGetVariables(&vrf, &set, &stmt2);
+  check_err(vrf.err, error_none);
+  ut_assert(set.size == 3, "set size = %lu, expected 3", set.size);
+  symstringClean(&stmt);
+  symstringClean(&stmt2);
+  symstringClean(&set);
   verifierClean(&vrf);
   return 0;
 }
@@ -113,6 +151,9 @@ Test_verifierMakeFrame(void)
   for (i = 0; i < var_size; i++) {
     varIds[i] = verifierAddVariable(&vrf, varSyms[i]);
   }
+  ut_assert(vrf.symCount[symType_variable] == var_size,
+    "added %lu variables, expected %d", vrf.symCount[symType_variable],
+    var_size);
   LOG_DEBUG("preparing floats");
   struct symstring wff[flt_size];
   for (i = 0; i < flt_size; i++) {
@@ -128,16 +169,35 @@ Test_verifierMakeFrame(void)
   size_tArrayAppend(&plus, ssplus, 4);
   LOG_DEBUG("adding floats and essentials");
   fltIds[0] = verifierAddFloating(&vrf, fltSyms[0], &wff[0]);
+  check_err(vrf.err, error_none);
   fltIds[1] = verifierAddFloating(&vrf, fltSyms[1], &wff[1]);
+  check_err(vrf.err, error_none);
   verifierAddEssential(&vrf, essSyms[0], &plus);
+  check_err(vrf.err, error_none);
   fltIds[2] = verifierAddFloating(&vrf, fltSyms[2], &wff[2]);
+  check_err(vrf.err, error_none);
   fltIds[3] = verifierAddFloating(&vrf, fltSyms[3], &wff[3]);
   check_err(vrf.err, error_none);
+  ut_assert(vrf.symCount[symType_floating] == 4, "added %lu floating, "
+    "expected 4", vrf.symCount[symType_floating]);
+  ut_assert(vrf.symCount[symType_essential] == 1, "added %lu essential, "
+    "expected 1", vrf.symCount[symType_essential]);
+  ut_assert(vrf.hypotheses.vals[vrf.rId].size == 5, "added %lu "
+    "hypotheses, expected 5", vrf.hypotheses.vals[vrf.rId].size);
+  LOG_DEBUG("preparing disjoint");
+  struct symstring disjoint;
+  symstringInit(&disjoint);
+  symstringAdd(&disjoint, varIds[0]);
+  symstringAdd(&disjoint, varIds[1]);
+  LOG_DEBUG("adding disjoint");
+  verifierAddDisjoint(&vrf, &disjoint);
+  ut_assert(vrf.disjoints.vals[vrf.rId].size == 1, "added %lu disjoints, "
+    "expected 1", vrf.disjoints.vals[vrf.rId].size);
   LOG_DEBUG("preparing assertion");
   struct symstring asr;
   symstringInit(&asr);
   size_t ssasr[6] =
-  {cstIds[0], varIds[0], cstIds[4], varIds[1], cstIds[4], varIds[3]};
+  {cstIds[0], varIds[0], cstIds[4], varIds[1], cstIds[4], varIds[2]};
   size_tArrayAppend(&asr, ssasr, 6);
   LOG_DEBUG("making the frame");
   struct frame frm;
@@ -145,6 +205,11 @@ Test_verifierMakeFrame(void)
   LOG_DEBUG("calling verifierMakeFrame()");
   verifierMakeFrame(&vrf, &frm, &asr);
   check_err(vrf.err, error_none);
+  ut_assert(frm.disjoint1.size == 1, "%lu disjoints in frame, expected 1",
+    frm.disjoint1.size);
+  LOG_DEBUG("make sure frame is the right size");
+  ut_assert(frm.stmts.size == 4, "frame has size %lu, expected 4",
+    frm.stmts.size);
   LOG_DEBUG("make sure wff_w has not been added to the frame");
   for (i = 0; i < frm.stmts.size; i++) {
     ut_assert(frm.stmts.vals[i] != fltIds[3],
@@ -299,58 +364,49 @@ Test_verifierApplyAssertion(void)
   const size_t y = 3;
   const size_t a = 4;
   const size_t b = 5;
-  const size_t tx = 6;
-  const size_t ty = 7;
-  const size_t txy = 8;
+  // const size_t tx = 6;
+  // const size_t ty = 7;
+  // const size_t txy = 8;
   const size_t tyx = 9;
   const size_t tx_f[2] = {t, x};
   const size_t ty_f[2] = {t, y};
   const size_t txy_e[3] = {t, x, y};
   const size_t tyx_a[3] = {t, y, x};
-  const size_t frame_a[3] = {tx, ty, txy};
+  // const size_t frame_a[3] = {tx, ty, txy};
   const size_t stack1[2] = {t, a};
   const size_t stack2[2] = {t, b};
   const size_t stack3[3] = {t, a, b};
   const size_t res[3] = {t, b, a};
   struct verifier vrf;
-  struct symstring stmt;
-  struct frame frm;
   verifierInit(&vrf);
-  verifierAddSymbolExplicit(&vrf, "t", symType_constant, 1, 0, 0, 0, 0, 0, 0,
-    0);
-  verifierAddSymbolExplicit(&vrf, "x", symType_variable, 1, 1, 0, 0, 0, 0, 0,
-    0);
-  verifierAddSymbolExplicit(&vrf, "y", symType_variable, 1, 1, 0, 0, 0, 0, 0,
-    0);
-  verifierAddSymbolExplicit(&vrf, "a", symType_variable, 1, 1, 0, 0, 0, 0, 0,
-    0);
-  verifierAddSymbolExplicit(&vrf, "b", symType_variable, 1, 1, 0, 0, 0, 0, 0,
-    0);
+  struct reader r;
+  readerInitString(&r, "");
+  verifierAddFileExplicit(&vrf, &r);
+  verifierBeginReadingFile(&vrf, 0);
+  struct symstring stmt;
+  LOG_DEBUG("add constant");
+  verifierAddConstant(&vrf, "t");
+  LOG_DEBUG("add variables");
+  verifierAddVariable(&vrf, "x");
+  verifierAddVariable(&vrf, "y");
+  verifierAddVariable(&vrf, "a");
+  verifierAddVariable(&vrf, "b");
+  LOG_DEBUG("add floatings");
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, tx_f, 2);
-  verifierAddStatement(&vrf, &stmt);
-  verifierAddSymbolExplicit(&vrf, "tx", symType_floating, 1, 0, 0, 0, 0, 0, 0,
-    0);
+  verifierAddFloating(&vrf, "tx", &stmt);
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, ty_f, 2);
-  verifierAddStatement(&vrf, &stmt);
-  verifierAddSymbolExplicit(&vrf, "ty", symType_floating, 1, 0, 0, 1, 0, 0,
-    0, 0);
+  verifierAddFloating(&vrf, "ty", &stmt);
+  LOG_DEBUG("add essential");
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, txy_e, 3);
-  verifierAddStatement(&vrf, &stmt);
-  verifierAddSymbolExplicit(&vrf, "txy", symType_essential, 1, 0, 0, 2, 0, 0,
-    0, 0);
-/* the frame for tyx */
-  frameInit(&frm);
-  size_tArrayAppend(&frm.stmts, frame_a, 3);
-  verifierAddFrame(&vrf, &frm);
+  verifierAddEssential(&vrf, "txy", &stmt);
+  LOG_DEBUG("add assertion");
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, tyx_a, 3);
-  verifierAddStatement(&vrf, &stmt);
-  verifierAddSymbolExplicit(&vrf, "tyx", symType_assertion, 1, 0, 0, 3, 0, 0,
-    0, 0);
-/* prepare the stack */
+  verifierAddAssertion(&vrf, "tyx", &stmt);
+  LOG_DEBUG("prepare stack");
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, stack1, 2);
   symstringArrayAdd(&vrf.stack, stmt);
@@ -360,7 +416,7 @@ Test_verifierApplyAssertion(void)
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, stack3, 3);
   symstringArrayAdd(&vrf.stack, stmt);
-/* apply the assertion */
+  LOG_DEBUG("apply assertion");
   verifierApplyAssertion(&vrf, tyx);
   ut_assert(!vrf.err, "assertion application failed");
   symstringInit(&stmt);
@@ -447,7 +503,7 @@ do { \
   file = f; \
   readerInitString(&r, file); \
   verifierInit(&vrf); \
-  verifierAddFile(&vrf, &r); \
+  verifierAddFileExplicit(&vrf, &r); \
   vrf.r = &vrf.files.vals[0]; \
   vrf.rId = 0; \
   verifierParseConstants(&vrf); \
@@ -459,12 +515,12 @@ do { \
   readerInitString(&r, "savage $.\n");
   charArrayAppend(&r.filename, "file1", 5 + 1);
   verifierInit(&vrf);
-  verifierAddFile(&vrf, &r);
+  verifierAddFileExplicit(&vrf, &r);
   vrf.r = &vrf.files.vals[0];
   verifierParseConstants(&vrf);
   readerInitString(&r, "savage $.\n");
   charArrayAppend(&r.filename, "file2", 5 + 1);
-  verifierAddFile(&vrf, &r);
+  verifierAddFileExplicit(&vrf, &r);
   vrf.r = &vrf.files.vals[1];
   verifierParseConstants(&vrf);
   check_err(vrf.err, error_duplicateSymbol);
@@ -486,7 +542,7 @@ Test_verifierParseVariables(void)
   vrf.r = &vrf.files.vals[0];
   verifierParseVariables(&vrf);
   check_err(vrf.err, error_none);
-  size_t numvar = vrf.active[symType_variable].vals[0].size;
+  size_t numvar = vrf.symCount[symType_variable];
   ut_assert(numvar == 8, "parsed %lu variables, should be 8", numvar);
   verifierClean(&vrf);
   return 0;
@@ -958,7 +1014,6 @@ Test_verifierParseStatement(void)
     error_expectedNewLine,
     error_invalidKeyword,
     error_unexpectedKeyword,
-
   };
   size_t i;
   int isEndOfScope;
@@ -994,6 +1049,7 @@ Test_verifierParseBlock(void)
     "$v a b c $. "
     "$} "
     "$v x $. \n",
+/* file 1 */
   };
   const enum error errs[file_size] = {
     error_none,
@@ -1023,6 +1079,7 @@ all(void)
   ut_run(Test_verifierInit);
   ut_run(Test_verifierDeactivateSymbols);
   ut_run(Test_verifierAddDisjoint);
+  ut_run(Test_verifierGetVariables);
   ut_run(Test_verifierMakeFrame);
   ut_run(Test_verifierIsValidDisjointPairSubstitution);
   ut_run(Test_verifierIsValidSubstitution);

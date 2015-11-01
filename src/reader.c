@@ -41,6 +41,7 @@ void
 readerInitString(struct reader* r, const char* s)
 {
   readerInit(r);
+  charArrayAppend(&r->filename, "", 1);
   r->stream.s = s;
   r->get = &readerGetString;
 }
@@ -49,8 +50,7 @@ void
 readerInitFile(struct reader* r, FILE* f, const char* filename)
 {
   readerInit(r);
-  charArrayAppend(&r->filename , filename, strlen(filename));
-  charArrayAdd(&r->filename, '\0');
+  charArrayAppend(&r->filename , filename, strlen(filename) + 1);
   r->stream.f = f;
   r->get = &readerGetFile;
 }

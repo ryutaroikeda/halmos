@@ -69,7 +69,6 @@ struct frame {
 /* indices to verifier->symbols for pairwise disjoint variables */
   struct size_tArray disjoint1;
   struct size_tArray disjoint2;
-
 };
 
 void
@@ -94,15 +93,20 @@ struct verifier {
   struct symbolArray symbols;
   struct symstringArray stmts;
   struct frameArray frames;
-/* the symbols currently in scope. active[t].vals[f] gives the list of */
-/* variables in scope of type t in file f */
-  struct symstringArray active[symType_size];
+/* disjoint symbols currently in scope, for each open file */
+  struct symstringArray disjoints;
+/* floating and essential hypotheses currently in scope, for each open file */
+  struct symstringArray hypotheses;
+/* variables currently in scope, for each open file */
+  struct symstringArray variables;
 /* reverse polish notation stack for verifying proofs */
   struct symstringArray stack;
 /* the file currently being verified */
   struct reader* r;
 /* nesting level for each file */
   struct size_tArray scope;
+/* count of symbols parsed */
+  size_t symCount[symType_size];
 /* index of the current file */
   size_t rId;
   enum error err;
@@ -120,10 +124,10 @@ verifierClean(struct verifier* vrf);
 size_t
 verifierGetSymId(const struct verifier* vrf, const char* sym);
 
-void
+size_t
 verifierAddFileExplicit(struct verifier* vrf, struct reader* r);
 
-void
+size_t
 verifierAddFile(struct verifier* vrf, struct reader* r);
 
 void
@@ -174,6 +178,10 @@ verifierAddProvable(struct verifier* vrf, const char* sym,
 
 void
 verifierDeactivateSymbols(struct verifier* vrf);
+
+void
+verifierGetVariables(struct verifier* vrf, struct symstring* set,
+  const struct symstring* stmt);
 
 void
 verifierMakeFrame(struct verifier* vrf, struct frame* frm, 

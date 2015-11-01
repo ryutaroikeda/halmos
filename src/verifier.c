@@ -1,4 +1,5 @@
 #include "verifier.h"
+#include "logger.h"
 
 DEFINE_ARRAY(symbol)
 DEFINE_ARRAY(frame)
@@ -74,11 +75,14 @@ verifierInit(struct verifier* vrf)
   symbolArrayAdd(&vrf->symbols, vrf->symbol_none);
   symstringArrayInit(&vrf->stmts, 1);
   frameArrayInit(&vrf->frames, 1);
-  for (i = 0; i < symType_size; i++) {
-    symstringArrayInit(&vrf->active[i], 1);
-  }
+  symstringArrayInit(&vrf->disjoints, 1);
+  symstringArrayInit(&vrf->hypotheses, 1);
+  symstringArrayInit(&vrf->variables, 1);
   symstringArrayInit(&vrf->stack, 1);
   size_tArrayInit(&vrf->scope, 1);
+  for (i = 0; i < symType_size; i++) {
+    vrf->symCount[i] = 0;
+  }
   vrf->r = NULL;
   vrf->rId = 0;
   vrf->err = error_none;
@@ -88,18 +92,24 @@ verifierInit(struct verifier* vrf)
 void
 verifierClean(struct verifier* vrf)
 {
-  size_t i, j;
+  size_t i;
   size_tArrayClean(&vrf->scope);
   for (i = 0; i < vrf->stack.size; i++) {
     symstringClean(&vrf->stack.vals[i]);
   }
   symstringArrayClean(&vrf->stack);
-  for (i = 0; i < symType_size; i++) {
-    for (j = 0; j < vrf->active[i].size; j++) {
-      symstringClean(&vrf->active[i].vals[j]);
-    }
-    symstringArrayClean(&vrf->active[i]);
+  for (i = 0; i < vrf->variables.size; i++) {
+    symstringClean(&vrf->variables.vals[i]);
   }
+  symstringArrayClean(&vrf->variables);
+  for (i = 0; i < vrf->hypotheses.size; i++) {
+    symstringClean(&vrf->hypotheses.vals[i]);
+  }
+  symstringArrayClean(&vrf->hypotheses);
+  for (i = 0; i < vrf->disjoints.size; i++) {
+    symstringClean(&vrf->disjoints.vals[i]);
+  }
+  symstringArrayClean(&vrf->disjoints);
   for (i = 0; i < vrf->frames.size; i++) {
     frameClean(&vrf->frames.vals[i]);
   }
@@ -182,7 +192,6 @@ verifierIsFreshFile(const struct verifier* vrf, const char* file)
   size_t i;
   for (i = 0; i < vrf->files.size; i++) {
     if (strcmp(readerGetFilename(&vrf->files.vals[i]), file) == 0) {
-      // verifierSetError(vrf, error_duplicateFile);
       return 0;
     }
   }
@@ -196,27 +205,31 @@ verifierIsType(const struct verifier* vrf, size_t symId, enum symType type)
   return vrf->symbols.vals[symId].type == type;
 }
 
-void
+size_t
 verifierAddFileExplicit(struct verifier* vrf, struct reader* r)
 {
   readerArrayAdd(&vrf->files, *r);
   size_tArrayAdd(&vrf->scope, 0);
-  size_t i;
-  for (i = 0; i < symType_size; i++) {
-    struct symstring syms;
-    symstringInit(&syms);
-    symstringArrayAdd(&vrf->active[i], syms);
-  }
+  struct symstring dsj, hyp, vars;
+  symstringInit(&dsj);
+  symstringInit(&hyp);
+  symstringInit(&vars);
+  symstringArrayAdd(&vrf->disjoints, dsj);
+  symstringArrayAdd(&vrf->hypotheses, hyp);
+  symstringArrayAdd(&vrf->variables, vars);
+  return vrf->files.size - 1;
 }
 
-void
+size_t
 verifierAddFile(struct verifier* vrf, struct reader* r)
 {
   if (!verifierIsFreshFile(vrf, readerGetFilename(r))) {
+    verifierSetError(vrf, error_duplicateFile);
     LOG_INFO("file %s was already added", readerGetFilename(r));
-    return;
+/* fix me: add a special file with id 0 like we do for symbols? */
+    return 0;
   }
-  verifierAddFileExplicit(vrf, r);
+  return verifierAddFileExplicit(vrf, r);
 }
 
 void
@@ -227,7 +240,6 @@ verifierBeginReadingFile(struct verifier* vrf, size_t rId)
   vrf->r = &vrf->files.vals[rId];
 }
 
-/* this does not update vrf->active. Call verifierAddSymbol instead */
 size_t
 verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
  enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
@@ -236,8 +248,7 @@ verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
   size_t symId = vrf->symbols.size;
   struct symbol s;
   symbolInit(&s);
-  charArrayAppend(&s.sym, sym, strlen(sym));
-  charArrayAdd(&s.sym, '\0');
+  charArrayAppend(&s.sym, sym, strlen(sym) + 1);
   s.type = type;
   s.isActive = isActive;
   s.isTyped = isTyped;
@@ -248,6 +259,7 @@ verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
   s.line = line;
   s.offset = offset;
   symbolArrayAdd(&vrf->symbols, s);
+  vrf->symCount[type]++;
   return symId;
 }
 
@@ -269,7 +281,14 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
   size_t symId = verifierAddSymbolExplicit(vrf, sym, type, 1, 0,
     vrf->scope.vals[vrf->rId], vrf->stmts.size, vrf->frames.size, vrf->rId,
     vrf->r->line, vrf->r->offset);
-  symstringAdd(&vrf->active[type].vals[vrf->rId], symId);
+/* for $d, $f, $e, or $v, update the active list */
+  if (type == symType_disjoint) {
+    symstringAdd(&vrf->disjoints.vals[vrf->rId], symId);
+  } else if (type == symType_floating || type == symType_essential) {
+    symstringAdd(&vrf->hypotheses.vals[vrf->rId], symId);
+  } else if (type == symType_variable) {
+    symstringAdd(&vrf->variables.vals[vrf->rId], symId);
+  }
   return symId;
 }
 
@@ -305,7 +324,7 @@ verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
         size_t symId = verifierAddSymbolExplicit(vrf, "", symType_disjoint, 1,
          0, vrf->scope.vals[vrf->rId], 0, 0, vrf->rId, vrf->r->line,
          vrf->r->offset);
-        symstringAdd(&vrf->active[symType_disjoint].vals[vrf->rId], symId);
+        symstringAdd(&vrf->disjoints.vals[vrf->rId], symId);
         struct symstring pair;
         symstringInit(&pair);
         symstringAdd(&pair, stmt->vals[i]);
@@ -376,22 +395,37 @@ verifierAddProvable(struct verifier* vrf, const char* sym,
 void
 verifierDeactivateSymbols(struct verifier* vrf)
 {
-  size_t i, j;
+  size_t i;
   size_t scope = vrf->scope.vals[vrf->rId];
-  for (i = 0; i < symType_size; i++) {
-    struct symstring* syms = &vrf->active[i].vals[vrf->rId];
-    if (syms->size == 0) { continue; }
-    for (j = syms->size; j > 0; j--) {
-      struct symbol* sym = &vrf->symbols.vals[syms->vals[j - 1]];
-      if (scope != sym->scope) { break; }
-      sym->isActive = 0;
-      sym->isTyped = 0;
-      syms->size--;
+  struct symstring* disjoints = &vrf->disjoints.vals[vrf->rId];
+  for (i = disjoints->size; i > 0; i--) {
+    struct symbol* sym = &vrf->symbols.vals[disjoints->vals[i - 1]];
+    if (sym->scope < scope) { break; }
+    sym->isActive = 0;
+    disjoints->size--;
+  }
+  struct symstring* hypotheses = &vrf->hypotheses.vals[vrf->rId];
+  for (i = hypotheses->size; i > 0; i--) {
+    struct symbol* sym = &vrf->symbols.vals[hypotheses->vals[i - 1]];
+    if (sym->scope < scope) { break; }
+    if (sym->type == symType_floating) {
+/* untype the variable referenced by the floating hypothesis */
+      size_t var = vrf->stmts.vals[sym->stmt].vals[1];
+      vrf->symbols.vals[var].isTyped = 0;
     }
+    sym->isActive = 0;
+    hypotheses->size--;
+  }
+  struct symstring* variables = &vrf->variables.vals[vrf->rId];
+  for (i = variables->size; i > 0; i--) {
+    struct symbol* sym = &vrf->symbols.vals[variables->vals[i - 1]];
+    if (sym->scope < scope) { break; }
+    sym->isActive = 0;
+    variables->size--;
   }
 }
 
-/* get the set of variables in str */
+/* add the set of variables in str to set */
 void
 verifierGetVariables(struct verifier* vrf, struct symstring* set, 
   const struct symstring* str)
@@ -408,60 +442,44 @@ verifierGetVariables(struct verifier* vrf, struct symstring* set,
   }
 }
 
-/* make the mandatory frame for the assertion stmt */
+/* make the mandatory frame for the assertion stmt. frm->stmts will be in */
+/* reverse order i.e. frm->stmts.vals[0] will be the last item */
 void
 verifierMakeFrame(struct verifier* vrf, struct frame* frm,
   const struct symstring* stmt)
 {
-  size_t i, j;
-  LOG_DEBUG("adding all disjoint-variable restrictions");
-  const struct symstring* syms = &vrf->active[symType_disjoint].vals[vrf->rId];
-  for (i = 0; i < syms->size; i++) {
-    frameAddDisjoint(frm, syms->vals[0], syms->vals[1]);
+  size_t i;
+/* add disjoints */
+  struct symstring* disjoints = &vrf->disjoints.vals[vrf->rId];
+  for (i = 0; i < disjoints->size; i++) {
+    struct symbol* disjoint = &vrf->symbols.vals[disjoints->vals[i]];
+    struct symstring* pair = &vrf->stmts.vals[disjoint->stmt];
+    frameAddDisjoint(frm, pair->vals[0], pair->vals[1]);
   }
-/* add floating and essential hypothesis in order of appearance. */
-/* The smaller symId is earlier. */
+/* the set of mandatory variables */
   struct symstring varset;
   symstringInit(&varset);
+/* add the variables referenced in the assertion */
   verifierGetVariables(vrf, &varset, stmt);
-  const struct symstring*
-  floating = &vrf->active[symType_floating].vals[vrf->rId];
-  const struct symstring*
-  essential = &vrf->active[symType_essential].vals[vrf->rId];
-  i = 0;
-  j = 0;
-  size_t floatingId = 0;
-  size_t essentialId = 0;
-/* do a 'merge sort' */
-  while (i < floating->size || j < essential->size) {
-/* find the next floating, if any */
-    while (i < floating->size) {
-      floatingId = floating->vals[i];
+/* look at the hypotheses in reverse order (latest first) */
+  struct symstring* hypotheses = &vrf->hypotheses.vals[vrf->rId];
+  for (i = hypotheses->size; i > 0; i--) {
+    size_t symId = hypotheses->vals[i - 1];
+    DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId");
+    struct symbol* hypothesis = &vrf->symbols.vals[symId];
+    if (hypothesis->type == symType_floating) {
+/* get the variable symbol of the floating */
+      size_t varId = vrf->stmts.vals[hypothesis->stmt].vals[1];
+      if (symstringIsIn(&varset, varId)) {
 /* we found a mandatory hypothesis */
-      if (symstringIsIn(&varset, floatingId)) { break; }
-      i++;
-    }
-    if (j < essential->size) {
-      essentialId = essential->vals[j];
-    }
-    if (((floatingId < essentialId) || (j >= essential->size) )
-      && i < floating->size) {
-      symstringAdd(&frm->stmts, floatingId);
-      i++;
-    } else if (((essentialId < floatingId) || (i >= floating->size))
-      && j < essential->size) {
-      symstringAdd(&frm->stmts, essentialId);
-      j++;
+        symstringAdd(&frm->stmts, symId);
+      }
+    } else if (hypothesis->type == symType_essential) {
+/* add variables referenced in the hypothesis to varset */
+      verifierGetVariables(vrf, &varset, &vrf->stmts.vals[hypothesis->stmt]);
+      symstringAdd(&frm->stmts, symId);
     }
   }
-/* check the ordering */
-  if (frm->stmts.size > 0) {
-    for (i = 0; i < frm->stmts.size - 1; i++) {
-      DEBUG_ASSERT(frm->stmts.vals[i] < frm->stmts.vals[i + 1],
-        "incorrect order of symbols in frame");
-    }
-  }
-  LOG_DEBUG("cleaning up");
   symstringClean(&varset);
 }
 
@@ -593,7 +611,7 @@ verifierUnify(struct verifier* vrf, struct substitution* sub,
   substitutionAdd(sub, floating->vals[1], &str);
 }
 
-/* use an assertion or a theorem. Pop the appropriate number of entries,  */
+/* use an assertion or a theorem. Pop the appropriate number of entries, */
 /* type-check, do unification and push the result */
 void
 verifierApplyAssertion(struct verifier* vrf, size_t symId)
@@ -610,13 +628,14 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
   struct symstringArray args;
   symstringArrayInit(&args, argc);
   for (i = 0; i < argc; i++) {
-/* popping and adding to the array causes the order of arguments to be */
+/* note: popping and adding to the array causes the order of arguments to be */
 /* reversed */
     struct symstring str = verifierPop(vrf);
     if (vrf->err) { break; }
     symstringArrayAdd(&args, str);
   }
 /* get the patterns to match with the arguments. */
+/* frm->stmts are in reverse order */
   struct symstringArray pats;
   symstringArrayInit(&pats, 1);
   for (i = 0; i < argc; i++) {
@@ -631,11 +650,13 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
   struct substitution sub;
   substitutionInit(&sub);
   for (i = 0; i < args.size; i++) {
-    if (!verifierIsType(vrf, frm->stmts.vals[i], symType_floating)) {
+    if (!verifierIsType(vrf, frm->stmts.vals[argc - 1 - i],
+      symType_floating)) {
       continue;
     }
-/* reverse the order of args and unify */
-    verifierUnify(vrf, &sub, &args.vals[args.size - 1 - i], &pats.vals[i]);
+/* reverse the order of args and pats, then unify */
+    verifierUnify(vrf, &sub, &args.vals[args.size - 1 - i],
+     &pats.vals[argc - 1 - i]);
   }
 /* check that the disjoint-variable restrictions are satisfied. If invalid, */
 /* vrf->err will be set */
@@ -643,18 +664,20 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
 /* apply the substitution to $e hypotheses and check if they match the args */
   for (i = 0; i < args.size; i++) {
     if (vrf->err) { break; }
-    if (!verifierIsType(vrf, frm->stmts.vals[i], symType_essential)) {
+    if (!verifierIsType(vrf, frm->stmts.vals[argc - 1 - i],
+      symType_essential)) {
       continue;
     }
-    substitutionApply(&sub, &pats.vals[i]);
-    if (!symstringIsEqual(&args.vals[args.size - 1 - i], &pats.vals[i])) {
-      verifierSetError(vrf, error_mismatchedEssentialHypothesis);
+    substitutionApply(&sub, &pats.vals[argc - 1 - i]);
+    if (!symstringIsEqual(&args.vals[args.size - 1 - i],
+      &pats.vals[argc - 1 - i])) {
       struct charArray ca1, ca2;
       charArrayInit(&ca1, 1);
       charArrayInit(&ca2, 1);
-      LOG_ERR("the argument %s does not match hypothesis %s",
+      H_LOG_ERR(vrf, error_mismatchedEssentialHypothesis, 
+        "the argument %s does not match hypothesis %s",
         verifierPrintSym(vrf, &ca1, &args.vals[args.size - 1 - i]),
-        verifierPrintSym(vrf, &ca2, &pats.vals[i]));
+        verifierPrintSym(vrf, &ca2, &pats.vals[argc - 1 - i]));
       charArrayClean(&ca1);
       charArrayClean(&ca2);
     }
@@ -953,9 +976,15 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm)
     verifierSetError(vrf, error_incorrectProof);
     LOG_ERR("the proof is empty");
   } else if (!symstringIsEqual(&vrf->stack.vals[0], thm)) {
-    verifierSetError(vrf, error_incorrectProof);
-/* to do: show why the proof is wrong */
-    LOG_ERR("the proof is wrong");
+    struct charArray res, theorem;
+    charArrayInit(&res, 1);
+    charArrayInit(&theorem, 1);
+    H_LOG_ERR(vrf, error_incorrectProof,
+      "%s was derived but the proof requires %s",
+      verifierPrintSym(vrf, &res, &vrf->stack.vals[0]),
+      verifierPrintSym(vrf, &theorem, thm));
+    charArrayClean(&res);
+    charArrayClean(&theorem);
   }
 }
 
@@ -1003,13 +1032,17 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
 /* to do: error check on $f and handle case when stmt.size != 2, otherwise */
 /* it will trigger an assert */
 /* to do: validate label token */
-/* fix me: get rid of const for tok, because reader will change tok? */
 void
 verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
 {
   vrf->err = error_none;
   readerSkip(vrf->r, whitespace);
   char* keyword = readerGetToken(vrf->r, whitespace);
+  if (vrf->r->err) {
+    H_LOG_ERR(vrf, error_expectedKeyword,
+      "expected keyword after label %s", tok);
+    return;
+  }
   if (keyword[0] != '$') {
     verifierSetError(vrf, error_expectedKeyword);
     LOG_ERR("expected a keyword after the label %s instead of %s", tok,
@@ -1071,7 +1104,7 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
 /* check if we are at the end of file */
   if (vrf->r->err) {
     *isEndOfScope = 1;
-/* the file must end with a new line character */
+/* the file must end with a new line character, except for empty files. */
 /* note: strchr(s, 0) is always true. vrf->r->last is initialized to 0, so */
 /* empty files don't raise this error */
     if (!strchr("\n\f", vrf->r->last)) {
@@ -1087,7 +1120,7 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
 /* we have a label */
 /* copy the label, because reader will change tok */
     struct charArray key;
-    charArrayInit(&key, strlen(tok));
+    charArrayInit(&key, strlen(tok) + 1);
 /* to do: this is error prone. Define a charstring struct */
     charArrayAppend(&key, tok, strlen(tok) + 1);
     verifierParseLabelledStatement(vrf, key.vals);
