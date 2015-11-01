@@ -734,11 +734,7 @@ verifierParseComment(struct verifier* vrf)
       return;
     }
     tok = readerGetToken(vrf->r, whitespace);
-    if (vrf->r->err) {
-      verifierSetError(vrf, error_expectedNewLine);
-      LOG_ERR("expected line break in the last line");
-      return;
-    }
+    if (vrf->r->err) { return; }
     size_t len = strlen(tok);
     if (len != 2) { continue; }
     if (tok[1] == '(') {
@@ -1106,10 +1102,10 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
     *isEndOfScope = 1;
 /* the file must end with a new line character, except for empty files. */
 /* note: strchr(s, 0) is always true. vrf->r->last is initialized to 0, so */
-/* empty files don't raise this error */
+/* empty files shouldn't raise this error */
     if (!strchr("\n\f", vrf->r->last)) {
-      verifierSetError(vrf, error_expectedNewLine);
-      LOG_ERR("expected new line at the end of file");
+      H_LOG_ERR(vrf, error_expectedNewLine,
+        "expected new line at the end of file");
     }
     return;
   }

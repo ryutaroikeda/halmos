@@ -20,7 +20,7 @@ struct reader {
   size_t offset;
   int skipped;
   int didSkip;
-  /* the character before a match or EOF with GetToken() and Skip() */
+/* the character before EOF, when using GetToken and Skip */
   int last;
   charGetter get;
   enum error err;

@@ -98,6 +98,7 @@ readerGetToken(struct reader* r, const char* delimiters)
     }
     if (strchr(delimiters, c)) {
       charArrayAdd(&r->tok, '\0');
+      r->last = c;
       break;
     }
     charArrayAdd(&r->tok, c);

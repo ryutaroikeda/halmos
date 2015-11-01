@@ -1037,7 +1037,7 @@ Test_verifierParseStatement(void)
 static int
 Test_verifierParseBlock(void)
 {
-  enum { file_size = 1 };
+  enum { file_size = 2 };
   const char* file[file_size] = {
 /* file 0 */
     "$c |- wff S 0 $. "
@@ -1050,8 +1050,10 @@ Test_verifierParseBlock(void)
     "$} "
     "$v x $. \n",
 /* file 1 */
+    "",
   };
   const enum error errs[file_size] = {
+    error_none,
     error_none,
   };
   size_t i;
