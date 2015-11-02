@@ -43,7 +43,7 @@ enum error {
   error_incorrectProof,
   error_invalidFile,
   error_expectedFilename,
-  error_unexpectedFilename,
+  error_expectedLineNumber,
   error_size
 };
 

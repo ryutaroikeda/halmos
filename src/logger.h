@@ -5,9 +5,9 @@
 do { \
   verifierSetError(vrf, err); \
   fprintf(stderr, "%s:%lu:%lu " lab " [%s] ", \
-    vrf->files.vals[vrf->rId].filename.vals, \
-    vrf->files.vals[vrf->rId].line, \
-    vrf->files.vals[vrf->rId].offset, \
+    vrf->files.vals[vrf->rId].vals, \
+    vrf->r->line, \
+    vrf->r->offset, \
     errorString(err)); \
   fprintf(stderr, __VA_ARGS__); \
   fprintf(stderr, "\n"); \

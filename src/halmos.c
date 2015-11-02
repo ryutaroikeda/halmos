@@ -41,9 +41,11 @@ halmosCompile(struct halmos* h, const char* filename)
   size_t i;
   if (h->flags[halmosflag_preproc]) {
     printf("------preproc\n");
-    preprocParseFile(&h->p, filename, h->flagsArgv[halmosflag_preproc][0]);
+    preprocCompile(&h->p, filename, h->flagsArgv[halmosflag_preproc][0]);
   } else {
-    verifierParseFile(&h->vrf, filename);
+    printf("------preproc\n");
+    preprocCompile(&h->p, filename, "out.mm");
+    verifierCompile(&h->vrf, "out.mm");
     printf("Found %lu errors\n", h->vrf.errc);
   }
   if (h->flags[halmosflag_summary]) {

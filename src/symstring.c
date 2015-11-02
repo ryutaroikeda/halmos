@@ -2,7 +2,7 @@
 #include "symstring.h"
 
 /* we want to write 'struct symstring' and 'struct symstringArray'. We */
-/* defined symstring as size_tArray in the header, so undo this temporarily. */
+/* #defined symstring as size_tArray in the header, so undo this temporarily. */
 #ifdef symstring
 #undef symstring
 DEFINE_ARRAY(symstring)

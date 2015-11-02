@@ -1,6 +1,7 @@
 #ifndef _HALMOSVERIFIER_H_
 #define _HALMOSVERIFIER_H_
 #include "array.h"
+#include "charstring.h"
 #include "error.h"
 #include "reader.h"
 #include "symstring.h"
@@ -11,8 +12,6 @@ DECLARE_ARRAY(symbol)
 struct frame;
 typedef struct frame frame;
 DECLARE_ARRAY(frame)
-typedef struct reader reader;
-DECLARE_ARRAY(reader)
 
 enum symType {
   symType_none,
@@ -74,31 +73,36 @@ int
 frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2);
 
 extern const size_t symbol_none_id;
+extern const size_t file_none_id;
 
 struct verifier {
 /* a special symbol with symId 0 */
   struct symbol symbol_none;
-/* files opened for verification */
-  struct readerArray files;
+/* a table of symbols */
   struct symbolArray symbols;
   struct symstringArray stmts;
   struct frameArray frames;
-/* disjoint symbols currently in scope, for each open file */
-  struct symstringArray disjoints;
-/* floating and essential hypotheses currently in scope, for each open file */
-  struct symstringArray hypotheses;
-/* variables currently in scope, for each open file */
-  struct symstringArray variables;
+/* disjoint symbols currently in scope */
+  struct symstring disjoints;
+/* floating and essential hypotheses currently in scope */
+  struct symstring hypotheses;
+/* variables currently in scope */
+  struct symstring variables;
 /* reverse polish notation stack for verifying proofs */
   struct symstringArray stack;
 /* the file currently being verified */
   struct reader* r;
-/* nesting level for each file */
-  struct size_tArray scope;
+/* a special file with id 0 */
+  struct charstring file_none;
+/* a list of filenames */
+  struct charstringArray files;
+/* id of the current file */
+  size_t rId;
+/* nesting level */
+  size_t scope;
 /* count of symbols parsed */
   size_t symCount[symType_size];
-/* index of the current file */
-  size_t rId;
+/* error from most recent operation */
   enum error err;
 /* the number of errors reported */
   size_t errc;
@@ -117,14 +121,11 @@ verifierEmptyStack(struct verifier* vrf);
 size_t
 verifierGetSymId(const struct verifier* vrf, const char* sym);
 
-size_t
-verifierAddFileExplicit(struct verifier* vrf, struct reader* r);
+// size_t
+// verifierAddFile(struct verifier* vrf, struct reader* r);
 
-size_t
-verifierAddFile(struct verifier* vrf, struct reader* r);
-
-void
-verifierBeginReadingFile(struct verifier* vrf, size_t rId);
+// void
+// verifierBeginReadingFile(struct verifier* vrf, size_t rId);
 
 /* return the symId of the symbol added */
 size_t
@@ -232,9 +233,6 @@ void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt);
 
 void
-verifierParseFileInclusion(struct verifier* vrf);
-
-void
 verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
  const char* tok);
 
@@ -248,10 +246,9 @@ void
 verifierParseBlock(struct verifier* vrf);
 
 void
-verifierParseFileExplicit(struct verifier* vrf, const char* filename,
-  const char* mode);
+verifierBeginReadingFile(struct verifier* vrf, struct reader* r);
 
 void
-verifierParseFile(struct verifier* vrf, const char* filename);
+verifierCompile(struct verifier* vrf, const char* in);
 
 #endif

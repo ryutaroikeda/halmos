@@ -23,16 +23,9 @@ Test_frameInit(void)
 static int
 Test_verifierInit(void)
 {
-  char f[] = "";
   struct verifier vrf;
   verifierInit(&vrf);
-  struct reader file;
-  readerInitString(&file, f);
-  charArrayAppend(&file.filename, "test", 4);
-  verifierAddFile(&vrf, &file);
-  vrf.r = &vrf.files.vals[0];
-  ut_assert(vrf.files.size == 1, "files.size == %lu, expected 1",
-    vrf.files.size);
+/* check we don't leak with valgrind */
   verifierClean(&vrf);
   return 0;
 }
@@ -44,10 +37,10 @@ Test_verifierDeactivateSymbols(void)
   struct reader r;
   verifierInit(&vrf);
   readerInitString(&r, "");
-  verifierAddFile(&vrf, &r);
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r);
   verifierDeactivateSymbols(&vrf);
   check_err(vrf.err, error_none);
+  readerClean(&r);
   verifierClean(&vrf);
   return 0;
 }
@@ -66,13 +59,13 @@ Test_verifierAddDisjoint(void)
   verifierInit(&vrf);
   struct reader r;
   readerInitString(&r, "");
-  verifierAddFile(&vrf, &r);
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r);
   verifierAddDisjoint(&vrf, &d);
   check_err(vrf.err, error_none);
   size_t size = vrf.symCount[symType_disjoint];
   ut_assert(size == 10, 
     "added %lu disjoint pairs, expected 10", size);
+  readerClean(&r);
   verifierClean(&vrf);
   return 0;
 }
@@ -84,8 +77,7 @@ Test_verifierGetVariables(void)
   verifierInit(&vrf);
   struct reader r;
   readerInitString(&r, "");
-  verifierAddFile(&vrf, &r);
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r);
   size_t zero = verifierAddConstant(&vrf, "0");
   size_t x = verifierAddVariable(&vrf, "x");
   size_t y = verifierAddVariable(&vrf, "y");
@@ -111,6 +103,7 @@ Test_verifierGetVariables(void)
   symstringClean(&stmt);
   symstringClean(&stmt2);
   symstringClean(&set);
+  readerClean(&r);
   verifierClean(&vrf);
   return 0;
 }
@@ -141,8 +134,7 @@ Test_verifierMakeFrame(void)
     "vrf->rId");
   struct reader file;
   readerInitString(&file, "");
-  verifierAddFile(&vrf, &file);
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &file);
   LOG_DEBUG("adding constants");
   for (i = 0; i < cst_size; i++) {
     cstIds[i] = verifierAddConstant(&vrf, cstSyms[i]);
@@ -182,8 +174,8 @@ Test_verifierMakeFrame(void)
     "expected 4", vrf.symCount[symType_floating]);
   ut_assert(vrf.symCount[symType_essential] == 1, "added %lu essential, "
     "expected 1", vrf.symCount[symType_essential]);
-  ut_assert(vrf.hypotheses.vals[vrf.rId].size == 5, "added %lu "
-    "hypotheses, expected 5", vrf.hypotheses.vals[vrf.rId].size);
+  ut_assert(vrf.hypotheses.size == 5, "added %lu "
+    "hypotheses, expected 5", vrf.hypotheses.size);
   LOG_DEBUG("preparing disjoint");
   struct symstring disjoint;
   symstringInit(&disjoint);
@@ -191,8 +183,8 @@ Test_verifierMakeFrame(void)
   symstringAdd(&disjoint, varIds[1]);
   LOG_DEBUG("adding disjoint");
   verifierAddDisjoint(&vrf, &disjoint);
-  ut_assert(vrf.disjoints.vals[vrf.rId].size == 1, "added %lu disjoints, "
-    "expected 1", vrf.disjoints.vals[vrf.rId].size);
+  ut_assert(vrf.disjoints.size == 1, "added %lu disjoints, "
+    "expected 1", vrf.disjoints.size);
   LOG_DEBUG("preparing assertion");
   struct symstring asr;
   symstringInit(&asr);
@@ -218,6 +210,7 @@ Test_verifierMakeFrame(void)
   LOG_DEBUG("cleaning up");
   frameClean(&frm);
   symstringClean(&asr);
+  readerClean(&file);
   verifierClean(&vrf);
   return 0;
 }
@@ -229,6 +222,9 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   struct frame frm;
   struct substitution sub;
   verifierInit(&vrf);
+  struct reader r;
+  readerInitString(&r, "");
+  verifierBeginReadingFile(&vrf, &r);
   LOG_DEBUG("adding symbols");
   size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 
     1, 0, 0, 0, 0, 0, 0, 0);
@@ -236,9 +232,10 @@ Test_verifierIsValidDisjointPairSubstitution(void)
     1, 0, 0, 0, 0, 0, 0, 0);
   size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
     1, 0, 0, 0, 0, 0, 0, 0);
+  LOG_DEBUG("adding disjoints");
   frameInit(&frm);
   frameAddDisjoint(&frm, v1, v2);
-/* build the substitution */
+  LOG_DEBUG("building the substitution manually");
   struct symstring str1, str2;
   symstringInit(&str1);
   symstringInit(&str2);
@@ -272,6 +269,7 @@ Test_verifierIsValidDisjointPairSubstitution(void)
     "sub should be valid");
   substitutionClean(&sub);
   frameClean(&frm);
+  readerClean(&r);
   verifierClean(&vrf);
   return 0;
 }
@@ -283,6 +281,9 @@ Test_verifierIsValidSubstitution(void)
   struct substitution sub;
   struct frame frm;
   verifierInit(&vrf);
+  struct reader r;
+  readerInitString(&r, "");
+  verifierBeginReadingFile(&vrf, &r);
   size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable,
     1, 0, 0, 0, 0, 0, 0, 0);
   size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
@@ -310,6 +311,7 @@ Test_verifierIsValidSubstitution(void)
   ut_assert(verifierIsValidSubstitution(&vrf, &frm, &sub), "invalid sub");
   substitutionClean(&sub);
   frameClean(&frm);
+  readerClean(&r);
   verifierClean(&vrf);
   return 0;
 }
@@ -381,8 +383,7 @@ Test_verifierApplyAssertion(void)
   verifierInit(&vrf);
   struct reader r;
   readerInitString(&r, "");
-  verifierAddFileExplicit(&vrf, &r);
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r);
   struct symstring stmt;
   LOG_DEBUG("add constant");
   verifierAddConstant(&vrf, "t");
@@ -424,6 +425,7 @@ Test_verifierApplyAssertion(void)
   ut_assert(symstringIsEqual(&vrf.stack.vals[0], &stmt), "result of assertion "
     "application is wrong");
   symstringClean(&stmt);
+  readerClean(&r);
 /* frm is cleaned here */
   verifierClean(&vrf);
   return 0;
@@ -441,10 +443,10 @@ Test_verifierParseSymbol(void)
     file = f; \
     readerInitString(&r, file); \
     verifierInit(&vrf); \
-    verifierAddFile(&vrf, &r); \
-    vrf.r = &vrf.files.vals[0]; \
+    verifierBeginReadingFile(&vrf, &r); \
     verifierParseSymbol(&vrf, &isEndOfStatement, '.'); \
     check_err(vrf.err, e); \
+    readerClean(&r); \
     verifierClean(&vrf); \
   } while (0)
   testfile("forced:", error_unterminatedStatement);
@@ -456,8 +458,8 @@ Test_verifierParseSymbol(void)
   testfile("$. ", error_none);
   ut_assert(isEndOfStatement == 1, "isEndOfStatement is %d, expected 1",
    isEndOfStatement);
-#undef testfile
   return 0;
+#undef testfile
 }
 
 static int
@@ -474,18 +476,16 @@ Test_verifierParseStatementContent(void)
   size_t i;
   struct verifier vrf;
   verifierInit(&vrf);
-  struct reader r[file_size];
-  for (i = 0; i < file_size; i++) {
-    readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
-  }
   for (i = 0; i < file_size; i++) {
     struct symstring stmt;
     symstringInit(&stmt);
-    verifierBeginReadingFile(&vrf, i);
+    struct reader r;
+    readerInitString(&r, file[i]);
+    verifierBeginReadingFile(&vrf, &r);
     verifierParseStatementContent(&vrf, &stmt, '*');
     ut_assert(stmt.size == lens[i], "parsed %lu items, expected %lu",
       stmt.size, lens[i]);
+    readerClean(&r);
     symstringClean(&stmt);
   }
   verifierClean(&vrf);
@@ -503,26 +503,25 @@ do { \
   file = f; \
   readerInitString(&r, file); \
   verifierInit(&vrf); \
-  verifierAddFileExplicit(&vrf, &r); \
-  vrf.r = &vrf.files.vals[0]; \
-  vrf.rId = 0; \
+  verifierBeginReadingFile(&vrf, &r); \
   verifierParseConstants(&vrf); \
   check_err(vrf.err, e); \
+  readerClean(&r); \
   verifierClean(&vrf); \
 } while (0)
   testparse("", error_unterminatedStatement);
-  testparse("A savage place! $( c $) as holy and enchanted $.\n", error_none);
+  testparse("A savage place! c as holy and enchanted $.\n", error_none);
   readerInitString(&r, "savage $.\n");
   charArrayAppend(&r.filename, "file1", 5 + 1);
   verifierInit(&vrf);
-  verifierAddFileExplicit(&vrf, &r);
-  vrf.r = &vrf.files.vals[0];
+  verifierBeginReadingFile(&vrf, &r);
   verifierParseConstants(&vrf);
+  readerClean(&r);
   readerInitString(&r, "savage $.\n");
   charArrayAppend(&r.filename, "file2", 5 + 1);
-  verifierAddFileExplicit(&vrf, &r);
-  vrf.r = &vrf.files.vals[1];
+  verifierBeginReadingFile(&vrf, &r);
   verifierParseConstants(&vrf);
+  readerClean(&r);
   check_err(vrf.err, error_duplicateSymbol);
   verifierClean(&vrf);
   return 0;
@@ -532,18 +531,18 @@ do { \
 static int
 Test_verifierParseVariables(void)
 {
-  char* file = "And here were $( c $) forests ancient as the hills $.\n";
+  char* file = "And here were forests ancient as the hills $.\n";
   struct reader r;
   struct verifier vrf;
   readerInitString(&r, file);
   charArrayAppend(&r.filename, "file", 4 + 1);
   verifierInit(&vrf);
-  verifierAddFile(&vrf, &r);
-  vrf.r = &vrf.files.vals[0];
+  verifierBeginReadingFile(&vrf, &r);
   verifierParseVariables(&vrf);
   check_err(vrf.err, error_none);
   size_t numvar = vrf.symCount[symType_variable];
   ut_assert(numvar == 8, "parsed %lu variables, should be 8", numvar);
+  readerClean(&r);
   verifierClean(&vrf);
   return 0;
 }
@@ -569,11 +568,10 @@ Test_verifierParseDisjoints(void)
   struct symstring stmts[file_size];
   for (i = 0; i < file_size; i++) {
     readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
     symstringInit(&stmts[i]);
   }
   LOG_DEBUG("call BeginReadingFile to set valid vrf.rId");
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r[0]);
   size_t c = verifierAddConstant(&vrf, "c");
   size_t v = verifierAddVariable(&vrf, "v");
   struct symstring flt;
@@ -583,9 +581,10 @@ Test_verifierParseDisjoints(void)
   verifierAddFloating(&vrf, "f", &flt);
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
-    verifierBeginReadingFile(&vrf, i);
+    verifierBeginReadingFile(&vrf, &r[i]);
     verifierParseDisjoints(&vrf, &stmts[i]);
     check_err(vrf.err, errs[i]);
+    readerClean(&r[i]);
   }
   LOG_DEBUG("clean up");
   for (i = 0; i < file_size; i++) {
@@ -616,15 +615,15 @@ Test_verifierParseFloating(void)
   for (i = 0; i < file_size; i++) {
     symstringInit(&stmts[i]);
     readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
     check_err(vrf.err, error_none);
   }
 #define test_file(rId, error) \
 do { \
   LOG_DEBUG("testing file %d", rId); \
-  verifierBeginReadingFile(&vrf, rId); \
+  verifierBeginReadingFile(&vrf, &r[rId]); \
   verifierParseFloating(&vrf, &stmts[rId]); \
   check_err(vrf.err, error); \
+  readerClean(&r[rId]); \
 } while (0)
   test_file(0, error_invalidFloatingStatement);
   test_file(1, error_invalidFloatingStatement);
@@ -633,9 +632,11 @@ do { \
   test_file(3, error_expectedVariableSymbol);
   verifierAddVariable(&vrf, "y");
   test_file(4, error_none);
+  LOG_DEBUG("cleaning stmts");
   for (i = 0; i < file_size; i++) {
     symstringClean(&stmts[i]);
   }
+  LOG_DEBUG("cleaning vrf");
   verifierClean(&vrf);
   return 0;
 #undef test_file
@@ -672,10 +673,9 @@ Test_verifierParseEssential(void)
   struct symstring stmts[file_size];
   for (i = 0; i < file_size; i++) {
     readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
     symstringInit(&stmts[i]);
   }
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r[0]);
   size_t c = verifierAddConstant(&vrf, "|-");
   size_t v = verifierAddVariable(&vrf, "v");
   struct symstring flt;
@@ -686,7 +686,7 @@ Test_verifierParseEssential(void)
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
     vrf.errc = 0;
-    verifierBeginReadingFile(&vrf, i);
+    verifierBeginReadingFile(&vrf, &r[i]);
     LOG_DEBUG("parsing essential");
     verifierParseEssential(&vrf, &stmts[i]);
     LOG_DEBUG("done parsing, checking for errors");
@@ -697,6 +697,7 @@ Test_verifierParseEssential(void)
   LOG_DEBUG("clean up");
   for (i = 0; i < file_size; i++) {
     symstringClean(&stmts[i]);
+    readerClean(&r[i]);
   }
   verifierClean(&vrf);
   return 0;
@@ -733,10 +734,9 @@ Test_verifierParseAssertion(void)
   struct symstring stmts[file_size];
   for (i = 0; i < file_size; i++) {
     readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
     symstringInit(&stmts[i]);
   }
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r[0]);
   size_t c = verifierAddConstant(&vrf, "|-");
   size_t v = verifierAddVariable(&vrf, "v");
   struct symstring flt;
@@ -747,7 +747,7 @@ Test_verifierParseAssertion(void)
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
     vrf.errc = 0;
-    verifierBeginReadingFile(&vrf, i);
+    verifierBeginReadingFile(&vrf, &r[i]);
     LOG_DEBUG("parsing assertion");
     verifierParseAssertion(&vrf, &stmts[i]);
     LOG_DEBUG("done parsing, checking for errors");
@@ -758,6 +758,7 @@ Test_verifierParseAssertion(void)
   LOG_DEBUG("clean up");
   for (i = 0; i < file_size; i++) {
     symstringClean(&stmts[i]);
+    readerClean(&r[i]);
   }
   verifierClean(&vrf);
   return 0;
@@ -782,13 +783,13 @@ Test_verifierParseProofSymbol(void)
   struct reader r[file_size];
   for (i = 0; i < file_size; i++) {
     readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
   }
 #define test_file(f, error) \
 do { \
-  verifierBeginReadingFile(&vrf, f); \
+  verifierBeginReadingFile(&vrf, &r[f]); \
   verifierParseProofSymbol(&vrf, &isEndOfProof); \
   check_err(vrf.err, error); \
+  readerClean(&r[f]); \
 } while (0)
   test_file(0, error_none);
   test_file(1, error_undefinedSymbol);
@@ -837,15 +838,15 @@ Test_verifierParseProof(void)
   struct symstring thms[file_size];
   for (i = 0; i < file_size; i++) {
     readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
     symstringInit(&thms[i]);
     size_tArrayAppend(&thms[i], thms_s[i], thms_len[i]);
   }
 #define test_file(f, error) \
 do { \
-  verifierBeginReadingFile(&vrf, f); \
+  verifierBeginReadingFile(&vrf, &r[f]); \
   verifierParseProof(&vrf, &thms[f]); \
   check_err(vrf.err, error); \
+  readerClean(&r[f]); \
 } while (0)
   test_file(0, error_incorrectProof);
   verifierAddConstant(&vrf, "type");
@@ -884,10 +885,9 @@ Test_verifierParseProvable(void)
   struct reader r[file_size];
   for (i = 0; i < file_size; i++) {
     readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
     check_err(vrf.err, error_none);
   }
-  verifierBeginReadingFile(&vrf, 0);
+  verifierBeginReadingFile(&vrf, &r[0]);
   size_t type, var, flt;
   type = verifierAddConstant(&vrf, "type");
   var = verifierAddVariable(&vrf, "var");
@@ -901,42 +901,11 @@ Test_verifierParseProvable(void)
     LOG_DEBUG("testing file %lu", i);
     struct symstring stmt;
     symstringInit(&stmt);
-    verifierBeginReadingFile(&vrf, i);
+    verifierBeginReadingFile(&vrf, &r[i]);
     verifierParseProvable(&vrf, &stmt);
     check_err(vrf.err, errs[i]);
     symstringClean(&stmt);
-  }
-  verifierClean(&vrf);
-  return 0;
-}
-
-static int
-Test_verifierParseFileInclusion(void)
-{
-  enum { file_size = 3 };
-  const char* files[file_size] = {
-/* the filename must not contain spaces */
-    "Intheroomthewomencomeandgo $] ",
-    "Talking of Michelangelo. $] ",
-    "$] "
-  };
-  const enum error errs[file_size] = {
-    error_none,
-    error_unexpectedFilename,
-    error_expectedFilename,
-  };
-  size_t i;
-  struct verifier vrf;
-  verifierInit(&vrf);
-  struct reader r;
-  for (i = 0; i < file_size; i++) {
-    LOG_DEBUG("testing file %lu", i);
-    readerOpen(&r, files[i], "s");
-    size_t rId = verifierAddFileExplicit(&vrf, &r);
-    verifierBeginReadingFile(&vrf, rId);
-    verifierParseFileInclusion(&vrf);
-    check_err(vrf.err, errs[i]);
-    readerClose(&r);
+    readerClean(&r[i]);
   }
   verifierClean(&vrf);
   return 0;
@@ -945,21 +914,18 @@ Test_verifierParseFileInclusion(void)
 static int
 Test_verifierParseUnlabelledStatement(void)
 {
-  enum { file_size = 4 };
+  enum { file_size = 3 };
   const char* tok[file_size] = {
-    "$(",
     "$c",
     "$v",
     "$the",
   };
   const char* file[file_size] = {
-    "Let us go, through certain $half-deserted streets $) ",
-    "$( the muttering $) retreats $. ",
+    "the muttering retreats $. ",
     "Of restless nights in one-night cheap hotels $. ",
     "And sawdust restaurants with oyster-shells: "
   };
   const enum error errs[file_size] = {
-    error_none,
     error_none,
     error_none,
     error_invalidKeyword,
@@ -968,16 +934,14 @@ Test_verifierParseUnlabelledStatement(void)
   int isEndOfScope;
   struct verifier vrf;
   verifierInit(&vrf);
-  struct reader r[file_size];
-  for (i = 0; i < file_size; i++) {
-    readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
-  }
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
-    verifierBeginReadingFile(&vrf, i);
+    struct reader r;
+    readerInitString(&r, file[i]);
+    verifierBeginReadingFile(&vrf, &r);
     verifierParseUnlabelledStatement(&vrf, &isEndOfScope, tok[i]);
     check_err(vrf.err, errs[i]);
+    readerClean(&r);
   }
   verifierClean(&vrf);
   return 0;
@@ -986,32 +950,28 @@ Test_verifierParseUnlabelledStatement(void)
 static int
 Test_verifierParseLabelledStatement(void)
 {
-  enum { file_size = 4 };
+  enum { file_size = 3 };
   const char* file[file_size] = {
     "Let us go then, you and I ",
-    "$( When the evening is spread out against the sky $) $!! ",
     "$( Like a patient etherized upon a table $) $c ",
     "$f Let us $. "
   };
   const enum error errs[file_size] = {
     error_expectedKeyword,
-    error_invalidKeyword,
     error_unexpectedKeyword,
     error_expectedVariableSymbol
   };
   size_t i;
   struct verifier vrf;
   verifierInit(&vrf);
-  struct reader r[file_size];
-  for (i = 0; i < file_size; i++) {
-    readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
-  }
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
-    verifierBeginReadingFile(&vrf, i);
+    struct reader r;
+    readerInitString(&r, file[i]);
+    verifierBeginReadingFile(&vrf, &r);
     verifierParseLabelledStatement(&vrf, "label");
     check_err(vrf.err, errs[i]);
+    readerClean(&r);
   }
   verifierClean(&vrf);
   return 0;
@@ -1022,10 +982,10 @@ Test_verifierParseStatement(void)
 {
   enum { file_size = 11 };
   const char* file[file_size] = {
-    "$c |- number 0 1 $( Ring'd with the azure world he stands $) + $. ",
-    "$v x y $( The wrinkled sea beneath him crawls $) z w $. ",
-    "num_x $f $( He watches from his mountain walls, $) number x $. ",
-    "num_y $( And like a thunderbolt he falls. $) $f number y $. ",
+    "$c |- number 0 1 + $. ",
+    "$v x y z w $. ",
+    "num_x $f number x $. ",
+    "num_y $f number y $. ",
     "ess $e |- number x + y $. ",
     "asr $a |- number x + 0 + y $. ",
     "thm $p |- number x + y + 0 + x $= ess num_x asr $. ",
@@ -1051,16 +1011,14 @@ Test_verifierParseStatement(void)
   int isEndOfScope;
   struct verifier vrf;
   verifierInit(&vrf);
-  struct reader r[file_size];
-  for (i = 0; i < file_size; i++) {
-    readerInitString(&r[i], file[i]);
-    verifierAddFileExplicit(&vrf, &r[i]);
-  }
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
-    verifierBeginReadingFile(&vrf, i);
+    struct reader r;
+    readerInitString(&r, file[i]);
+    verifierBeginReadingFile(&vrf, &r);
     verifierParseStatement(&vrf, &isEndOfScope);
     check_err(vrf.err, errs[i]);
+    readerClean(&r);
   }
   verifierClean(&vrf);
   return 0;
@@ -1101,46 +1059,10 @@ Test_verifierParseBlock(void)
     verifierInit(&vrf);
     struct reader r;
     readerInitString(&r, file[i]);
-    size_t rId = verifierAddFileExplicit(&vrf, &r);
-    verifierBeginReadingFile(&vrf, rId);
+    verifierBeginReadingFile(&vrf, &r);
     verifierParseBlock(&vrf);
     check_err(vrf.err, errs[i]);
-    verifierClean(&vrf);
-  }
-  return 0;
-}
-
-static int
-Test_verifierParseFileExplicit(void)
-{
-  enum { file_size = 3 };
-  const char* files[file_size] = {
-    "",
-    "$[ $]\n",
-    "$[ j_alfred_prufrock $] \n"
-  };
-  const char* modes[file_size] = {
-    "invalidMode",
-    "s",
-    "s"
-  };
-  const enum error errs[file_size] = {
-    error_invalidFile,
-/* this error is hidden by the ParseBlock loop, but is emitted */
-/*    error_expectedFilename, */
-    error_none,
-    error_none
-  };
-  size_t i;
-/* to do: test recursive file inclusion; or should that be done from */
-/* frontend? */
-  for (i = 0; i < file_size; i++) {
-    LOG_DEBUG("testing file %lu", i);
-/* use a fresh verifier to bypass duplicate file error */
-    struct verifier vrf;
-    verifierInit(&vrf);
-    verifierParseFileExplicit(&vrf, files[i], modes[i]);
-    check_err(vrf.err, errs[i]);
+    readerClean(&r);
     verifierClean(&vrf);
   }
   return 0;
@@ -1170,12 +1092,10 @@ all(void)
   ut_run(Test_verifierParseProofSymbol);
   ut_run(Test_verifierParseProof);
   ut_run(Test_verifierParseProvable);
-  ut_run(Test_verifierParseFileInclusion);
   ut_run(Test_verifierParseUnlabelledStatement);
   ut_run(Test_verifierParseLabelledStatement);
   ut_run(Test_verifierParseStatement);
   ut_run(Test_verifierParseBlock);
-  ut_run(Test_verifierParseFileExplicit);
   return 0;
 }
 

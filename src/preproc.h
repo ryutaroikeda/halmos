@@ -2,9 +2,10 @@
 #define _HALMOSPREPROC_H_
 #include "error.h"
 struct reader;
+struct readerArray;
 struct preproc {
+  struct readerArray* rs;
   struct reader* r;
-  const char* out;
   enum error err;
   int errCount;
 };
@@ -19,9 +20,12 @@ void
 preprocParseComment(struct preproc* p);
 
 void
-preprocParseInclude(struct preproc* p);
+preprocParseInclude(struct preproc* p, FILE* fOut);
 
 void
-preprocParseFile(struct preproc* p, const char* in, const char* out);
+preprocParseFile(struct preproc* p, const char* in, FILE* fOut);
+
+void
+preprocCompile(struct preproc* p, const char* in, const char* out);
 
 #endif

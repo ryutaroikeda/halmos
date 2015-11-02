@@ -186,3 +186,5 @@ readerIsFile(const struct reader* r)
 {
   return r->mode == mode_file;
 }
+
+DEFINE_ARRAY(reader)

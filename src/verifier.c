@@ -3,7 +3,6 @@
 
 DEFINE_ARRAY(symbol)
 DEFINE_ARRAY(frame)
-DEFINE_ARRAY(reader)
 
 const char* symTypeStrings[symType_size] = {
   "none",
@@ -23,6 +22,7 @@ symTypeString(enum symType type)
 }
 
 const size_t symbol_none_id = 0;
+const size_t file_none_id = 0;
 
 void
 symbolInit(struct symbol* sym)
@@ -84,24 +84,28 @@ void
 verifierInit(struct verifier* vrf)
 {
   size_t i;
-/* initialize symbol_none */
+  symbolArrayInit(&vrf->symbols, 1);
+  /* add symbol_none */
   symbolInit(&vrf->symbol_none);
   charArrayAppend(&vrf->symbol_none.sym, "$none", 5 + 1);
-  readerArrayInit(&vrf->files, 1);
-  symbolArrayInit(&vrf->symbols, 1);
   symbolArrayAdd(&vrf->symbols, vrf->symbol_none);
   symstringArrayInit(&vrf->stmts, 1);
   frameArrayInit(&vrf->frames, 1);
-  symstringArrayInit(&vrf->disjoints, 1);
-  symstringArrayInit(&vrf->hypotheses, 1);
-  symstringArrayInit(&vrf->variables, 1);
+  symstringInit(&vrf->disjoints);
+  symstringInit(&vrf->hypotheses);
+  symstringInit(&vrf->variables);
   symstringArrayInit(&vrf->stack, 1);
-  size_tArrayInit(&vrf->scope, 1);
+  charstringArrayInit(&vrf->files, 1);
+/* add 'none' file */
+  charstringInit(&vrf->file_none);
+/* henceforth, no file is allowed to have the name " " */
+  charArrayAppend(&vrf->file_none, " ", 1 + 1);
+  charstringArrayAdd(&vrf->files, vrf->file_none);
+  vrf->rId = file_none_id;
+  vrf->scope = 0;
   for (i = 0; i < symType_size; i++) {
     vrf->symCount[i] = 0;
   }
-  vrf->r = NULL;
-  vrf->rId = 0;
   vrf->err = error_none;
   vrf->errc = 0;
 }
@@ -110,23 +114,17 @@ void
 verifierClean(struct verifier* vrf)
 {
   size_t i;
-  size_tArrayClean(&vrf->scope);
+  for (i = 0; i < vrf->files.size; i++) {
+    charstringClean(&vrf->files.vals[i]);
+  }
+  charstringArrayClean(&vrf->files);
   for (i = 0; i < vrf->stack.size; i++) {
     symstringClean(&vrf->stack.vals[i]);
   }
   symstringArrayClean(&vrf->stack);
-  for (i = 0; i < vrf->variables.size; i++) {
-    symstringClean(&vrf->variables.vals[i]);
-  }
-  symstringArrayClean(&vrf->variables);
-  for (i = 0; i < vrf->hypotheses.size; i++) {
-    symstringClean(&vrf->hypotheses.vals[i]);
-  }
-  symstringArrayClean(&vrf->hypotheses);
-  for (i = 0; i < vrf->disjoints.size; i++) {
-    symstringClean(&vrf->disjoints.vals[i]);
-  }
-  symstringArrayClean(&vrf->disjoints);
+  symstringClean(&vrf->variables);
+  symstringClean(&vrf->hypotheses);
+  symstringClean(&vrf->disjoints);
   for (i = 0; i < vrf->frames.size; i++) {
     frameClean(&vrf->frames.vals[i]);
   }
@@ -139,10 +137,6 @@ verifierClean(struct verifier* vrf)
     symbolClean(&vrf->symbols.vals[i]);
   }
   symbolArrayClean(&vrf->symbols);
-  for (i = 0; i < vrf->files.size; i++) {
-    readerClean(&vrf->files.vals[i]);
-  }
-  readerArrayClean(&vrf->files);
   vrf->r = NULL;
 }
 
@@ -212,17 +206,18 @@ verifierPrintSym(const struct verifier* vrf, struct charArray* msg,
   return msg->vals;
 }
 
-int
-verifierIsFreshFile(const struct verifier* vrf, const char* file)
+size_t
+verifierGetFileId(const struct verifier* vrf, const char* file)
 {
   DEBUG_ASSERT(file, "file is NULL");
   size_t i;
   for (i = 0; i < vrf->files.size; i++) {
-    if (strcmp(readerGetFilename(&vrf->files.vals[i]), file) == 0) {
-      return 0;
+    if (strcmp(vrf->files.vals[i].vals, file) == 0) {
+      return i;
     }
   }
-  return 1;
+/* reserved value */
+  return 0;
 }
 
 int
@@ -233,38 +228,28 @@ verifierIsType(const struct verifier* vrf, size_t symId, enum symType type)
 }
 
 size_t
-verifierAddFileExplicit(struct verifier* vrf, struct reader* r)
+verifierPreprocAddFile(struct verifier* vrf, const char* filename)
 {
-  readerArrayAdd(&vrf->files, *r);
-  size_tArrayAdd(&vrf->scope, 0);
-  struct symstring dsj, hyp, vars;
-  symstringInit(&dsj);
-  symstringInit(&hyp);
-  symstringInit(&vars);
-  symstringArrayAdd(&vrf->disjoints, dsj);
-  symstringArrayAdd(&vrf->hypotheses, hyp);
-  symstringArrayAdd(&vrf->variables, vars);
+  size_t fid = verifierGetFileId(vrf, filename);
+/* did we already add the file? */
+  if (fid != file_none_id) { return fid; }
+/* we add the new file */
+  size_t len = strlen(filename) + 1;
+  struct charstring f;
+  charArrayInit(&f, len);
+  charArrayAppend(&f, filename, len);
+  charstringArrayAdd(&vrf->files, f);
   return vrf->files.size - 1;
 }
 
-size_t
-verifierAddFile(struct verifier* vrf, struct reader* r)
-{
-  if (!verifierIsFreshFile(vrf, readerGetFilename(r))) {
-    verifierSetError(vrf, error_duplicateFile);
-    LOG_INFO("file %s was already added", readerGetFilename(r));
-/* fix me: add a special file with id 0 like we do for symbols? */
-    return 0;
-  }
-  return verifierAddFileExplicit(vrf, r);
-}
-
 void
-verifierBeginReadingFile(struct verifier* vrf, size_t rId)
+verifierPreprocBeginReading(struct verifier* vrf, size_t rId, size_t line)
 {
   DEBUG_ASSERT(rId < vrf->files.size, "%lu is an invalid file", rId);
   vrf->rId = rId;
-  vrf->r = &vrf->files.vals[rId];
+/* reset the line number and offset */
+  vrf->r->line = line;
+  vrf->r->offset = 0;
 }
 
 /* check the label contains only alphanumeric characters and -, _, and .. */
@@ -315,6 +300,7 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
     LOG_ERR("%s was used before", sym);
     return symbol_none_id;
   }
+/* symbol names cannot contain $ */
   if (strchr(sym, '$')) {
     verifierSetError(vrf, error_invalidSymbol);
     LOG_ERR("%s contains $", sym);
@@ -329,15 +315,15 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
     }
   }
   size_t symId = verifierAddSymbolExplicit(vrf, sym, type, 1, 0,
-    vrf->scope.vals[vrf->rId], vrf->stmts.size, vrf->frames.size, vrf->rId,
+    vrf->scope, vrf->stmts.size, vrf->frames.size, vrf->rId,
     vrf->r->line, vrf->r->offset);
 /* for $d, $f, $e, or $v, update the active list */
   if (type == symType_disjoint) {
-    symstringAdd(&vrf->disjoints.vals[vrf->rId], symId);
+    symstringAdd(&vrf->disjoints, symId);
   } else if (type == symType_floating || type == symType_essential) {
-    symstringAdd(&vrf->hypotheses.vals[vrf->rId], symId);
+    symstringAdd(&vrf->hypotheses, symId);
   } else if (type == symType_variable) {
-    symstringAdd(&vrf->variables.vals[vrf->rId], symId);
+    symstringAdd(&vrf->variables, symId);
   }
   return symId;
 }
@@ -372,9 +358,9 @@ verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
     for (i = 0; i < stmt->size - 1; i++) {
       for (j = i + 1; j < stmt->size; j++) {
         size_t symId = verifierAddSymbolExplicit(vrf, "", symType_disjoint, 1,
-         0, vrf->scope.vals[vrf->rId], 0, 0, vrf->rId, vrf->r->line,
+         0, vrf->scope, 0, 0, vrf->rId, vrf->r->line,
          vrf->r->offset);
-        symstringAdd(&vrf->disjoints.vals[vrf->rId], symId);
+        symstringAdd(&vrf->disjoints, symId);
         struct symstring pair;
         symstringInit(&pair);
         symstringAdd(&pair, stmt->vals[i]);
@@ -446,15 +432,15 @@ void
 verifierDeactivateSymbols(struct verifier* vrf)
 {
   size_t i;
-  size_t scope = vrf->scope.vals[vrf->rId];
-  struct symstring* disjoints = &vrf->disjoints.vals[vrf->rId];
+  size_t scope = vrf->scope;
+  struct symstring* disjoints = &vrf->disjoints;
   for (i = disjoints->size; i > 0; i--) {
     struct symbol* sym = &vrf->symbols.vals[disjoints->vals[i - 1]];
     if (sym->scope < scope) { break; }
     sym->isActive = 0;
     disjoints->size--;
   }
-  struct symstring* hypotheses = &vrf->hypotheses.vals[vrf->rId];
+  struct symstring* hypotheses = &vrf->hypotheses;
   for (i = hypotheses->size; i > 0; i--) {
     struct symbol* sym = &vrf->symbols.vals[hypotheses->vals[i - 1]];
     if (sym->scope < scope) { break; }
@@ -466,7 +452,7 @@ verifierDeactivateSymbols(struct verifier* vrf)
     sym->isActive = 0;
     hypotheses->size--;
   }
-  struct symstring* variables = &vrf->variables.vals[vrf->rId];
+  struct symstring* variables = &vrf->variables;
   for (i = variables->size; i > 0; i--) {
     struct symbol* sym = &vrf->symbols.vals[variables->vals[i - 1]];
     if (sym->scope < scope) { break; }
@@ -500,7 +486,7 @@ verifierMakeFrame(struct verifier* vrf, struct frame* frm,
 {
   size_t i;
 /* add disjoints */
-  struct symstring* disjoints = &vrf->disjoints.vals[vrf->rId];
+  struct symstring* disjoints = &vrf->disjoints;
   for (i = 0; i < disjoints->size; i++) {
     struct symbol* disjoint = &vrf->symbols.vals[disjoints->vals[i]];
     struct symstring* pair = &vrf->stmts.vals[disjoint->stmt];
@@ -512,7 +498,7 @@ verifierMakeFrame(struct verifier* vrf, struct frame* frm,
 /* add the variables referenced in the assertion */
   verifierGetVariables(vrf, &varset, stmt);
 /* look at the hypotheses in reverse order (latest first) */
-  struct symstring* hypotheses = &vrf->hypotheses.vals[vrf->rId];
+  struct symstring* hypotheses = &vrf->hypotheses;
   for (i = hypotheses->size; i > 0; i--) {
     size_t symId = hypotheses->vals[i - 1];
     DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId");
@@ -638,8 +624,9 @@ verifierPop(struct verifier* vrf)
   struct symstring str;
   vrf->err = error_none;
   if (vrf->stack.size == 0) {
-    verifierSetError(vrf, error_stackUnderflow);
-    LOG_ERR("stack is empty");
+/* to do: ... in proof of what? */
+    H_LOG_ERR(vrf, error_stackUnderflow,
+      "stack is empty");
     return str;
   }
   str = vrf->stack.vals[vrf->stack.size - 1];
@@ -769,7 +756,6 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
 }
 
 /* check all variables in the statement are typed */
-/* fix me: vrf should be const vrf */
 int
 verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
 {
@@ -787,33 +773,6 @@ verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
     }
   }
   return 1;
-}
-
-void
-verifierParseComment(struct verifier* vrf)
-{
-  char* tok;
-  vrf->err = error_none;
-  while (1) {
-    readerFind(vrf->r, "$");
-    if (vrf->r->err) {
-      verifierSetError(vrf, error_unterminatedComment);
-      LOG_ERR("reached end of file before $)");
-      return;
-    }
-    tok = readerGetToken(vrf->r, whitespace);
-    if (vrf->r->err) { return; }
-    size_t len = strlen(tok);
-    if (len != 2) { continue; }
-    if (tok[1] == '(') {
-      verifierSetError(vrf, error_unexpectedKeyword);
-      LOG_ERR("nested comments are forbidden");
-      return;
-    }
-    if (tok[1] == ')') {
-      break;
-    }
-  }
 }
 
 char* 
@@ -839,12 +798,9 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
     }
     if (tok[1] == end) {
       *isEndOfStatement = 1;
-    } else if (tok[1] == '(') {
-      verifierParseComment(vrf);
-      return verifierParseSymbol(vrf, isEndOfStatement, end);
     } else {
       H_LOG_ERR(vrf, error_unexpectedKeyword,
-        "expected $%c or $( instead of %s", end, tok);
+        "expected $%c instead of %s", end, tok);
     }
     return tok;
   }
@@ -854,13 +810,44 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
     LOG_ERR("reached end of file before $%c", end);
     return tok;
   }
-/* check the symbol name does not contain $ */
-  // if (strchr(tok, '$')) {
-  //   verifierSetError(vrf, error_invalidSymbol);
-  //   LOG_ERR("the symbol %s contains $", tok);
-  //   return tok;
-  // }
   return tok;
+}
+
+/* Parse the comment of the form '$( filename line $)' written by the */
+/* preprocessor to indicate change of file */
+void
+verifierParsePreprocFile(struct verifier* vrf)
+{
+  vrf->err = error_none;
+  int isEndOfStatement = 0;
+/* get the filename */
+  char* tok = verifierParseSymbol(vrf, &isEndOfStatement, ')');
+  if (vrf->r->err) { return; }
+  if (isEndOfStatement) {
+/* fix me: should we keep track of the file line of the raw preprocessed file to */
+/* report errors like this? */
+    H_LOG_ERR(vrf, error_expectedFilename, "a filename must follow $(");
+    return;
+  }
+  size_t rId = verifierPreprocAddFile(vrf, tok);
+  tok = verifierParseSymbol(vrf, &isEndOfStatement, ')');
+  if (vrf->r->err) { return; }
+  if (isEndOfStatement) {
+    H_LOG_ERR(vrf, error_expectedLineNumber,
+      "a line number must follow filename");
+  }
+/* convert the string to a number */
+/* fix me: do error checking? */
+  size_t line = strtoul(tok, NULL, 10);
+  verifierPreprocBeginReading(vrf, rId, line);
+/* go to the end of the comment, ignoring anything else without reporting */
+  while (1) {
+    readerFind(vrf->r, "$");
+    tok = readerGetToken(vrf->r, whitespace);
+    if (vrf->r->err) { break; }
+    if (strlen(tok) != 2) { continue; }
+    if (tok[1] == ')') { break; }
+  }
 }
 
 /* parses statements (excluding proofs) of the form */
@@ -1062,37 +1049,6 @@ verifierParseProvable(struct verifier* vrf, struct symstring* stmt)
   verifierParseProof(vrf, stmt);
 }
 
-void
-verifierParseFileInclusion(struct verifier* vrf) {
-  vrf->err = error_none;
-  char* tok;
-  int isEndOfStatement = 0;
-  tok = verifierParseSymbol(vrf, &isEndOfStatement, ']');
-  if (vrf->r->err || isEndOfStatement) {
-    H_LOG_ERR(vrf, error_expectedFilename, "a filename is required after $[");
-    return;
-  }
-  struct charArray filename;
-  charArrayInit(&filename, strlen(tok) + 1);
-  charArrayAppend(&filename, tok, strlen(tok) + 1);
-/* go to the end of the file inclusion statement */
-  int foundMoreFiles = 0;
-  while (!vrf->err) {
-    tok = verifierParseSymbol(vrf, &isEndOfStatement, ']');
-    if (isEndOfStatement) { break; }
-    if (!foundMoreFiles) {
-      H_LOG_ERR(vrf, error_unexpectedFilename,
-        "cannot include %s. Only one filename can be stated in $[ $]",
-        filename.vals);
-      foundMoreFiles = 1;
-    }
-  }
-  if (readerIsFile(vrf->r)) {
-    verifierParseFileExplicit(vrf, filename.vals, "f");
-  }
-  charArrayClean(&filename);
-}
-
 /* parse $c, $v, or $d statements, or a ${ block. */
 void
 verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
@@ -1104,7 +1060,11 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
     LOG_ERR("%s is not a keyword", tok);
     return;
   }
-  if (tok[1] == 'c') {
+  if (tok[1] == '(') {
+/* this is a special comment left by the preprocessor to indicate change of */
+/* filename */
+    verifierParsePreprocFile(vrf);
+  } else if (tok[1] == 'c') {
     verifierParseConstants(vrf);
   } else if (tok[1] == 'v') {
     verifierParseVariables(vrf);
@@ -1117,13 +1077,9 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
     verifierParseBlock(vrf);
   } else if (tok[1] == '}') {
     *isEndOfScope = 1;
-  } else if (tok[1] == '(') {
-    verifierParseComment(vrf);
-  } else if (tok[1] == '[') {
-    verifierParseFileInclusion(vrf);
   } else {
     verifierSetError(vrf, error_unexpectedKeyword);
-    LOG_ERR("expected $c, $v, $d, ${, $} or $( instead of %s", tok);
+    LOG_ERR("expected $c, $v, $d, ${, or $} instead of %s", tok);
   }
 }
 
@@ -1152,11 +1108,6 @@ verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
   if (len != 2) {
     verifierSetError(vrf, error_invalidKeyword);
     LOG_ERR("%s is not a valid keyword", keyword);
-    return;
-  }
-  if (keyword[1] == '(') {
-    verifierParseComment(vrf);
-    verifierParseLabelledStatement(vrf, tok);
     return;
   }
   enum symType type = symType_none;
@@ -1231,44 +1182,35 @@ void
 verifierParseBlock(struct verifier* vrf)
 {
   int isEndOfScope = 0;
-  vrf->scope.vals[vrf->rId]++;
+  vrf->scope++;
   while (!isEndOfScope) {
     verifierParseStatement(vrf, &isEndOfScope);
   }
 /* deactivate local symbols in the current nesting level */
   verifierDeactivateSymbols(vrf);
 /* go back to the previous nesting level */
-  vrf->scope.vals[vrf->rId]--;
+  vrf->scope--;
 }
 
 void
-verifierParseFileExplicit(struct verifier* vrf, const char* filename,
-  const char* mode)
+verifierBeginReadingFile(struct verifier* vrf, struct reader* r)
 {
-  vrf->err = error_none;
-  if (!verifierIsFreshFile(vrf, filename)) {
-/* we've opened this file before, so ignore it */
+  vrf->r = r;
+}
+
+/* to do: have an output file, for compressed proofs */
+void
+verifierCompile(struct verifier* vrf, const char* in)
+{
+  FILE* fin = fopen(in, "r");
+  if (!fin) {
+    G_LOG_ERR(vrf, error_failedFileOpen, "failed to open input file %s", in);
     return;
   }
-/* the current rId. If no file is being read, rId can be arbitrary */
-  size_t rId = vrf->rId;
   struct reader r;
-  readerOpen(&r, filename, mode);
-  if (r.err) {
-    G_LOG_ERR(vrf, error_invalidFile, "could not open file %s", filename);
-    return;
-  }
-  size_t thisFile = verifierAddFile(vrf, &r);
-  verifierBeginReadingFile(vrf, thisFile);
+  readerInitFile(&r, fin, in);
+  verifierBeginReadingFile(vrf, &r);
   verifierParseBlock(vrf);
-/* close the file */
-  readerClose(&r);
-/* go back to reading the original file */
-  vrf->rId = rId;
-}
-
-void
-verifierParseFile(struct verifier* vrf, const char* filename)
-{
-  verifierParseFileExplicit(vrf, filename, "f");
+  readerClean(&r);
+  fclose(fin);
 }

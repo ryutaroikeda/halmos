@@ -68,4 +68,7 @@ readerIsString(const struct reader* r);
 int
 readerIsFile(const struct reader* r);
 
+typedef struct reader reader;
+DECLARE_ARRAY(reader)
+
 #endif
