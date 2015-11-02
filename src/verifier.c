@@ -986,9 +986,8 @@ verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
   vrf->err = error_none;
   *isEndOfProof = 0;
   tok = verifierParseSymbol(vrf, isEndOfProof, '.');
-  if (*isEndOfProof) {
-    return;
-  }
+  if (vrf->err) { return; }
+  if (*isEndOfProof) { return; }
   size_t symId = verifierGetSymId(vrf, tok);
   if (symId == symbol_none_id) { 
     verifierSetError(vrf, error_undefinedSymbol);
@@ -1021,13 +1020,12 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm)
     verifierParseProofSymbol(vrf, &isEndOfProof);
   }
   if (vrf->stack.size > 1) {
-    verifierSetError(vrf, error_unusedTermInProof);
 /* to do: show which terms are unused */
-    LOG_ERR("the proof contains unused terms");
+    H_LOG_ERR(vrf, error_unusedTermInProof,
+      "the proof contains unused terms");
   }
   if (vrf->stack.size == 0) {
-    verifierSetError(vrf, error_incorrectProof);
-    LOG_ERR("the proof is empty");
+    H_LOG_ERR(vrf, error_incorrectProof, "the proof is empty");
   } else if (!symstringIsEqual(&vrf->stack.vals[0], thm)) {
     struct charArray res, theorem;
     charArrayInit(&res, 1);
@@ -1056,8 +1054,7 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
 {
   size_t len = strlen(tok);
   if (len != 2) {
-    verifierSetError(vrf, error_invalidKeyword);
-    LOG_ERR("%s is not a keyword", tok);
+    H_LOG_ERR(vrf, error_invalidKeyword, "%s is not a keyword", tok);
     return;
   }
   if (tok[1] == '(') {
@@ -1078,8 +1075,8 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
   } else if (tok[1] == '}') {
     *isEndOfScope = 1;
   } else {
-    verifierSetError(vrf, error_unexpectedKeyword);
-    LOG_ERR("expected $c, $v, $d, ${, or $} instead of %s", tok);
+    H_LOG_ERR(vrf, error_unexpectedKeyword,
+      "expected $c, $v, $d, ${, or $} instead of %s", tok);
   }
 }
 
