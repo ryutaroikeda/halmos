@@ -19,6 +19,10 @@ preprocInit(struct preproc* p)
 void
 preprocClean(struct preproc* p)
 {
+  size_t i;
+  for (i = 0; i < p->rs->size; i++) {
+    readerClean(&p->rs->vals[i]);
+  }
   readerArrayClean(p->rs);
   free(p->rs);
 }
@@ -42,13 +46,21 @@ preprocIsFresh(const struct preproc* p, const char* filename)
   return 1;
 }
 
-void
-preprocBeginReading(struct preproc* p, FILE* f, const char* filename)
+char*
+preprocParseSymbol(struct preproc* p, int* isEnd, int end)
 {
-  struct reader r;
-  readerInitFile(&r, f, filename);
-  readerArrayAdd(p->rs, r);
-  p->r = &p->rs->vals[p->rs->size - 1];
+  char* tok = readerGetToken(p->r, whitespace);
+  size_t len = strlen(tok);
+  if (len == 2) {
+    if ((tok[0] == '$') && (tok[1] == end)) {
+      *isEnd = 1;
+    }
+  }
+  if (p->r->err && !isEnd) {
+    P_LOG_ERR(p, error_unterminatedFileInclusion, 
+      "reached end of file before $]");
+  }
+  return tok;
 }
 
 void
@@ -62,6 +74,9 @@ preprocParseComment(struct preproc* p)
     if (tok[1] == ')') { break; }
     if (tok[1] == '(') {
       P_LOG_ERR(p, error_nestedComment, "comments cannot be nested");
+      p->err = error_none;
+      preprocParseComment(p);
+      break;
     }
   }
   if (p->r->err) {
@@ -72,11 +87,10 @@ preprocParseComment(struct preproc* p)
 void
 preprocParseInclude(struct preproc* p, FILE* fOut)
 {
+  int isEnd = 0;
   readerSkip(p->r, whitespace);
-  char* tok = readerGetToken(p->r, whitespace);
+  char* tok = preprocParseSymbol(p, &isEnd, ']');
   if (p->r->err) {
-    P_LOG_ERR(p, error_unterminatedFileInclusion, 
-      "reached end of file before $]");
     return;
   }
 /* if it is a new file, parse it */
@@ -86,20 +100,17 @@ preprocParseInclude(struct preproc* p, FILE* fOut)
     p->r = r;
   }
 /* find $] */
-  tok = readerGetToken(p->r, whitespace);
+  tok = preprocParseSymbol(p, &isEnd, ']');
   if (p->r->err) {
-    P_LOG_ERR(p, error_unterminatedFileInclusion, 
-      "reached end of file before $]");
     return;
   }
-  if (strcmp(tok, "$]") != 0) {
+  if (!isEnd) {
     P_LOG_ERR(p, error_expectedClosingBracket, "%s found instead of $]", tok);
     while (!p->r->err) {
       readerFind(p->r, "$");
-      tok = readerGetToken(p->r, whitespace);
+      tok = preprocParseSymbol(p, &isEnd, ']');
       if (p->r->err) { break; }
-      if (strlen(tok) != 2) { continue; }
-      if (tok[1] == ']') { break; }
+      if (isEnd) { break; }
     }
     if (p->r->err) {
       P_LOG_ERR(p, error_unterminatedFileInclusion, 
@@ -116,7 +127,11 @@ preprocParseFile(struct preproc* p, const char* in, FILE* fOut)
     P_LOG_ERR(p, error_failedOpenFile, "failed to open input file %s", in);
     return;
   }
-  preprocBeginReading(p, fIn, in);
+/* add the file to the list and begin reading it */
+  struct reader r;
+  readerInitFile(&r, fIn, in);
+  readerArrayAdd(p->rs, r);
+  p->r = &r;
   while (!p->r->err) {
     int c = readerGet(p->r);
     if (p->r->err) { break; }
@@ -134,7 +149,6 @@ preprocParseFile(struct preproc* p, const char* in, FILE* fOut)
       fprintf(fOut, "%c", c);
     }
   }
-  readerClean(p->r);
   fclose(fIn);
 }
 

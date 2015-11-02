@@ -1,5 +1,7 @@
 #include "dbg.h"
 #include "halmos.h"
+#include "preproc.h"
+#include "verifier.h"
 #include <stdio.h>
 
 static const char* flags[halmosflag_size] = {
@@ -20,8 +22,6 @@ void
 halmosInit(struct halmos* h)
 {
   size_t i;
-  verifierInit(&h->vrf);
-  preprocInit(&h->p);
   for (i = 0; i < halmosflag_size; i++) {
     h->flags[i] = 0;
     h->flagsArgv[i] = NULL;
@@ -31,29 +31,34 @@ halmosInit(struct halmos* h)
 void
 halmosClean(struct halmos* h)
 {
-  preprocClean(&h->p);
-  verifierClean(&h->vrf);
+  (void) h;
 }
 
 void
 halmosCompile(struct halmos* h, const char* filename)
 {
   size_t i;
+  struct verifier vrf;
+  struct preproc p;
+  verifierInit(&vrf);
+  preprocInit(&p);
   if (h->flags[halmosflag_preproc]) {
     printf("------preproc\n");
-    preprocCompile(&h->p, filename, h->flagsArgv[halmosflag_preproc][0]);
+    preprocCompile(&p, filename, h->flagsArgv[halmosflag_preproc][0]);
   } else {
     printf("------preproc\n");
-    preprocCompile(&h->p, filename, "out.mm");
-    verifierCompile(&h->vrf, "out.mm");
-    printf("Found %lu errors\n", h->vrf.errc);
+    preprocCompile(&p, filename, "out.mm");
+    verifierCompile(&vrf, "out.mm");
+    printf("Found %lu errors\n", vrf.errc);
   }
   if (h->flags[halmosflag_summary]) {
     printf("------summary\n");
     for (i = symType_constant; i < symType_size; i++) {
-      printf("Parsed %lu %s symbols\n", h->vrf.symCount[i], symTypeString(i));
+      printf("Parsed %lu %s symbols\n", vrf.symCount[i], symTypeString(i));
     }
   }
+  preprocClean(&p);
+  verifierClean(&vrf);
 }
 
 enum halmosflag
