@@ -9,6 +9,12 @@ static const char* errorStrings[error_size] = {
   "failedFileOpen",
   "failedFileClose",
   "invalidReaderMode",
+/* preprocessor errors */
+  "nestedComment",
+  "unterminatedComment",
+  "expectedClosingBracket",
+  "unterminatedFileInclusion",
+  "failedOpenFile",
 /* external (user) errors */
   "expectedNewLine",
   "expectedConstantSymbol",
@@ -16,7 +22,6 @@ static const char* errorStrings[error_size] = {
   "expectedFloatingSymbol",
   "expectedKeyword",
   "unexpectedKeyword",
-  "unterminatedComment",
   "unterminatedStatement",
   "untypedVariable",
   "invalidSymbol",

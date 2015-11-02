@@ -9,6 +9,12 @@ enum error {
   error_failedFileOpen,
   error_failedFileClose,
   error_invalidReaderMode,
+/* preprocessor errors */
+  error_nestedComment,
+  error_unterminatedComment,
+  error_expectedClosingBracket,
+  error_unterminatedFileInclusion,
+  error_failedOpenFile,
 /* external (user) errors */
   error_expectedNewLine,
   error_expectedConstantSymbol,
@@ -16,7 +22,6 @@ enum error {
   error_expectedFloatingSymbol,
   error_expectedKeyword,
   error_unexpectedKeyword,
-  error_unterminatedComment,
   error_unterminatedStatement,
   error_untypedVariable,
   error_invalidSymbol,
@@ -39,7 +44,7 @@ enum error {
   error_invalidCompressedProof,
   error_invalidFile,
   error_expectedFilename,
-  error_unexpectedFilename,
+  error_expectedLineNumber,
   error_size
 };
 
