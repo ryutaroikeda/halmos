@@ -1,0 +1,103 @@
+#ifndef _HALMOSSYMTAB_H_
+#define _HALMOSSYMTAB_H_
+#include "array.h"
+#include <stdint.h>
+
+struct symbol;
+typedef struct symbol symbol;
+DECLARE_ARRAY(symbol)
+
+enum symType {
+  symType_none,
+  symType_constant,
+  symType_variable,
+  symType_disjoint,
+  symType_floating,
+  symType_essential,
+  symType_assertion,
+  symType_provable,
+  symType_size
+};
+
+const char* symTypeString(enum symType type);
+
+struct symbol {
+  struct charArray sym;
+  enum symType type;
+/* 1 if the symbol is currently in scope */
+/* used for checking freshness */
+  int isActive;
+/* 1 if the symbol is a variable and typed through $f */
+  int isTyped;
+/* the nesting level */
+  size_t scope;
+/* for $f, $e, $a, and $p statements */
+  size_t stmt;
+/* for $a and $p assertions */
+  size_t frame;
+/* index to verifier->files, which is an array of readers */
+  size_t file; 
+  size_t line; 
+  size_t offset; 
+};
+
+struct symnode;
+
+struct symnode {
+/* hash */
+  uint32_t h;
+/* pointer to the symbol. If p is NULL, we are in an empty node */
+  struct symbol* p;
+/* if there is a collision, point to the next node */
+/* If NULL, there are no more nodes */
+  struct symnode* next;
+};
+
+struct symtree;
+struct symtree {
+  struct symnode node;
+  struct symtree* less;
+  struct symtree* more;
+};
+
+struct symtab {
+  struct symtree t;
+/* we want the symbol table here, but keep it in verifier for now */
+};
+
+void
+symbolInit(struct symbol* sym);
+
+void
+symbolClean(struct symbol* sym);
+
+void
+symnodeInit(struct symnode* n);
+
+void
+symnodeClean(struct symnode* n);
+
+void
+symnodeInsert(struct symnode* n, uint32_t h, struct symbol* p);
+
+void
+symtreeInit(struct symtree* t);
+
+void
+symtreeClean(struct symtree* t);
+
+/* insert p with key h */
+void
+symtreeInsert(struct symtree* t, uint32_t h, struct symbol* p);
+
+/* find the first node with the given hash */
+struct symnode*
+symtreeFind(struct symtree* t, uint32_t h);
+
+void
+symtabInit(struct symtab* tab);
+
+void
+symtabClean(struct symtab* tab);
+
+#endif

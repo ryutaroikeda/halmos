@@ -5,51 +5,11 @@
 #include "error.h"
 #include "reader.h"
 #include "symstring.h"
+#include "symtab.h"
 
-struct symbol;
-typedef struct symbol symbol;
-DECLARE_ARRAY(symbol)
 struct frame;
 typedef struct frame frame;
 DECLARE_ARRAY(frame)
-
-enum symType {
-  symType_none,
-  symType_constant,
-  symType_variable,
-  symType_disjoint,
-  symType_floating,
-  symType_essential,
-  symType_assertion,
-  symType_provable,
-  symType_size
-};
-
-const char* symTypeString(enum symType type);
-
-struct symbol {
-  struct charArray sym;
-  enum symType type;
-/* 1 if the symbol is currently in scope */
-/* used for checking freshness */
-  int isActive;
-/* 1 if the symbol is a variable and typed through $f */
-  int isTyped;
-/* the nesting level */
-  size_t scope;
-/* for $f, $e, $a, and $p statements */
-  size_t stmt;
-/* for $a and $p assertions */
-  size_t frame;
-/* index to verifier->files, which is an array of readers */
-  size_t file; 
-  size_t line; 
-  size_t offset; 
-};
-
-void symbolInit(struct symbol* sym);
-
-void symbolClean(struct symbol* sym);
 
 /* frame, for assertions and provables. This is not an extended frame */
 struct frame {
