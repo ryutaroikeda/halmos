@@ -60,6 +60,8 @@ Test_verifierAddDisjoint(void)
   struct reader r;
   readerInitString(&r, "");
   verifierBeginReadingFile(&vrf, &r);
+/* add scope to bypass assertion */
+  size_tArrayAdd(&vrf.disjointScope, 0);
   verifierAddDisjoint(&vrf, &d);
   check_err(vrf.err, error_none);
   size_t size = vrf.symCount[symType_disjoint];
@@ -135,6 +137,7 @@ Test_verifierMakeFrame(void)
   struct reader file;
   readerInitString(&file, "");
   verifierBeginReadingFile(&vrf, &file);
+  size_tArrayAdd(&vrf.disjointScope, 0);
   LOG_DEBUG("adding constants");
   for (i = 0; i < cst_size; i++) {
     cstIds[i] = verifierAddConstant(&vrf, cstSyms[i]);
@@ -183,8 +186,8 @@ Test_verifierMakeFrame(void)
   symstringAdd(&disjoint, varIds[1]);
   LOG_DEBUG("adding disjoint");
   verifierAddDisjoint(&vrf, &disjoint);
-  ut_assert(vrf.disjoints.size == 1, "added %lu disjoints, "
-    "expected 1", vrf.disjoints.size);
+  ut_assert(vrf.disjoint1.size == 1, "added %lu disjoints, "
+    "expected 1", vrf.disjoint1.size);
   LOG_DEBUG("preparing assertion");
   struct symstring asr;
   symstringInit(&asr);
@@ -225,6 +228,7 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   struct reader r;
   readerInitString(&r, "");
   verifierBeginReadingFile(&vrf, &r);
+  size_tArrayAdd(&vrf.disjointScope, 0);
   LOG_DEBUG("adding symbols");
   size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 
     1, 0, 0, 0, 0, 0, 0, 0);
@@ -278,6 +282,7 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   ut_assert(verifierIsValidDisjointPairSubstitution(&vrf, &ctx, &frm, &sub, 
     0, 1), "sub should be valid");
   substitutionClean(&sub);
+  frameClean(&ctx);
   frameClean(&frm);
   readerClean(&r);
   verifierClean(&vrf);
@@ -295,6 +300,7 @@ Test_verifierIsValidSubstitution(void)
   struct reader r;
   readerInitString(&r, "");
   verifierBeginReadingFile(&vrf, &r);
+  size_tArrayAdd(&vrf.disjointScope, 0);
   size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable,
     1, 0, 0, 0, 0, 0, 0, 0);
   size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
@@ -1051,6 +1057,7 @@ Test_verifierParseStatement(void)
   int isEndOfScope;
   struct verifier vrf;
   verifierInit(&vrf);
+  size_tArrayAdd(&vrf.disjointScope, 0);
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
     struct reader r;

@@ -56,8 +56,13 @@ struct verifier {
   struct symbolArray symbols;
   struct symstringArray stmts;
   struct frameArray frames;
+/* disjoint variable restrictions currently in scope */
+  struct size_tArray disjoint1;
+  struct size_tArray disjoint2;
+/* number of restrictions at the beginning of each scope level */
+  struct size_tArray disjointScope;
 /* disjoint symbols currently in scope */
-  struct symstring disjoints;
+  // struct symstring disjoints;
 /* floating and essential hypotheses currently in scope */
   struct symstring hypotheses;
 /* variables currently in scope */

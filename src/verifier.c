@@ -109,7 +109,9 @@ verifierInit(struct verifier* vrf)
   symbolArrayAdd(&vrf->symbols, vrf->symbol_none);
   symstringArrayInit(&vrf->stmts, 1);
   frameArrayInit(&vrf->frames, 1);
-  symstringInit(&vrf->disjoints);
+  size_tArrayInit(&vrf->disjoint1, 1);
+  size_tArrayInit(&vrf->disjoint2, 1);
+  size_tArrayInit(&vrf->disjointScope, 1);
   symstringInit(&vrf->hypotheses);
   symstringInit(&vrf->variables);
   symstringArrayInit(&vrf->stack, 1);
@@ -142,7 +144,9 @@ verifierClean(struct verifier* vrf)
   symstringArrayClean(&vrf->stack);
   symstringClean(&vrf->variables);
   symstringClean(&vrf->hypotheses);
-  symstringClean(&vrf->disjoints);
+  size_tArrayClean(&vrf->disjointScope);
+  size_tArrayClean(&vrf->disjoint2);
+  size_tArrayClean(&vrf->disjoint1);
   for (i = 0; i < vrf->frames.size; i++) {
     frameClean(&vrf->frames.vals[i]);
   }
@@ -368,10 +372,11 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
     vrf->scope, vrf->stmts.size, vrf->frames.size, vrf->rId,
     vrf->r->line, vrf->r->offset);
 /* for $d, $f, $e, or $v, update the active list */
-  if (type == symType_disjoint) {
+  // if (type == symType_disjoint) {
 /* this is actually never called because AddDisjoint calls AddSymExplicit */
-    symstringAdd(&vrf->disjoints, symId);
-  } else if (type == symType_floating || type == symType_essential) {
+    // symstringAdd(&vrf->disjoints, symId);
+  // } else 
+  if (type == symType_floating || type == symType_essential) {
     symstringAdd(&vrf->hypotheses, symId);
   } else if (type == symType_variable) {
     symstringAdd(&vrf->variables, symId);
@@ -404,20 +409,25 @@ void
 verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
 {
   size_t i, j;
+  DEBUG_ASSERT(vrf->disjointScope.size > 0, "disjointScope empty");
   H_LOG_INFO(vrf, 4,
     "adding entries for each disjoint variable restriction pair");
   if (stmt->size > 0) {
     for (i = 0; i < stmt->size - 1; i++) {
       for (j = i + 1; j < stmt->size; j++) {
-        size_t symId = verifierAddSymbolExplicit(vrf, "", symType_disjoint, 1,
-         0, vrf->scope, 0, 0, vrf->rId, vrf->r->line,
-         vrf->r->offset);
-        symstringAdd(&vrf->disjoints, symId);
-        struct symstring pair;
-        symstringInit(&pair);
-        symstringAdd(&pair, stmt->vals[i]);
-        symstringAdd(&pair, stmt->vals[j]);
-        vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, &pair);
+        // size_t symId = verifierAddSymbolExplicit(vrf, "", symType_disjoint, 1,
+         // 0, vrf->scope, 0, 0, vrf->rId, vrf->r->line,
+         // vrf->r->offset);
+        // symstringAdd(&vrf->disjoints, symId);
+        // struct symstring pair;
+        // symstringInit(&pair);
+        // symstringAdd(&pair, stmt->vals[i]);
+        // symstringAdd(&pair, stmt->vals[j]);
+        // vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, &pair);
+        size_tArrayAdd(&vrf->disjoint1, stmt->vals[i]);
+        size_tArrayAdd(&vrf->disjoint2, stmt->vals[j]);
+        vrf->disjointScope.vals[vrf->disjointScope.size - 1]++;
+        vrf->symCount[symType_disjoint]++;
         H_LOG_INFO(vrf, 5, "added $d %s %s $.", 
           verifierGetSymName(vrf, stmt->vals[i]),
           verifierGetSymName(vrf, stmt->vals[j]));
@@ -479,6 +489,19 @@ verifierAddProvable(struct verifier* vrf, const char* sym,
   return symId;
 }
 
+void
+verifierDeactivateDisjointVariableRestrictions(struct verifier* vrf)
+{
+  size_t i;
+  DEBUG_ASSERT(vrf->disjointScope.size > 0, "disjointScope empty");
+  size_t end = vrf->disjointScope.vals[vrf->disjointScope.size - 1];
+  for (i = vrf->disjoint1.size; i > end; i--) {
+    vrf->disjoint1.size--;
+    vrf->disjoint2.size--;
+  }
+  vrf->disjointScope.size--;
+}
+
 /* deactivate non-global symbols in the current nesting level */
 void
 verifierDeactivateSymbols(struct verifier* vrf)
@@ -486,13 +509,6 @@ verifierDeactivateSymbols(struct verifier* vrf)
   H_LOG_INFO(vrf, 4, "deactivating symbols going out of scope");
   size_t i;
   size_t scope = vrf->scope;
-  struct symstring* disjoints = &vrf->disjoints;
-  for (i = disjoints->size; i > 0; i--) {
-    struct symbol* sym = &vrf->symbols.vals[disjoints->vals[i - 1]];
-    if (sym->scope < scope) { break; }
-    sym->isActive = 0;
-    disjoints->size--;
-  }
   struct symstring* hypotheses = &vrf->hypotheses;
   for (i = hypotheses->size; i > 0; i--) {
     struct symbol* sym = &vrf->symbols.vals[hypotheses->vals[i - 1]];
@@ -539,11 +555,8 @@ verifierMakeFrame(struct verifier* vrf, struct frame* frm,
 {
   size_t i;
 /* add disjoints */
-  struct symstring* disjoints = &vrf->disjoints;
-  for (i = 0; i < disjoints->size; i++) {
-    struct symbol* disjoint = &vrf->symbols.vals[disjoints->vals[i]];
-    struct symstring* pair = &vrf->stmts.vals[disjoint->stmt];
-    frameAddDisjoint(frm, pair->vals[0], pair->vals[1]);
+  for (i = 0; i < vrf->disjoint1.size; i++) {
+    frameAddDisjoint(frm, vrf->disjoint1.vals[i], vrf->disjoint2.vals[i]);
   }
 /* the set of mandatory variables */
   struct symstring varset;
@@ -1415,11 +1428,13 @@ verifierParseBlock(struct verifier* vrf)
 {
   int isEndOfScope = 0;
   vrf->scope++;
+  size_tArrayAdd(&vrf->disjointScope, 0);
   while (!isEndOfScope) {
     verifierParseStatement(vrf, &isEndOfScope);
   }
-/* deactivate local symbols in the current nesting level */
+/* deactivate local symbols and restrictions in the current nesting level */
   verifierDeactivateSymbols(vrf);
+  verifierDeactivateDisjointVariableRestrictions(vrf);
 /* go back to the previous nesting level */
   vrf->scope--;
 }

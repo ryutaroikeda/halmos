@@ -107,6 +107,10 @@ halmosMain(int argc, char* argv[])
   int i;
   for (i = 1; i < argc - 1; i++) {
     enum halmosflag flag = halmosParseFlag(&h, argv[i]);
+    if (flag == halmosflag_none) {
+      printf("unrecognized flag %s\n", argv[i]);
+      return 0;
+    }
     if (flagsArgc[flag] > 0) {
       h.flagsArgv[flag] = &argv[i + 1];
     }
