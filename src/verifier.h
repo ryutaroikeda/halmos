@@ -74,8 +74,6 @@ frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2);
 
 /* data for processing compressed proofs */
 struct proof {
-/* the frame containing the mandatory hypotheses */
-  struct frame* frm;
 /* labels used in the proof which are not in the mandatory hypothesis */
   struct symstring dependencies;
 /* tagged proof steps */
@@ -122,6 +120,8 @@ struct verifier {
   enum error err;
 /* the number of errors reported */
   size_t errc;
+/* logging verbosity */
+  size_t verb;
 /* to do: have a dynamic array of errors */
 };
 
@@ -184,7 +184,7 @@ verifierAddAssertion(struct verifier* vrf, const char* sym,
 
 size_t
 verifierAddProvable(struct verifier* vrf, const char* sym,
-  struct symstring* stmt);
+  struct symstring* stmt, struct frame* frm);
 
 void
 verifierDeactivateSymbols(struct verifier* vrf);
@@ -212,6 +212,9 @@ verifierUnify(struct verifier* vrf, struct substitution* sub,
 
 void
 verifierApplyAssertion(struct verifier* vrf, size_t symId);
+
+void
+verifierCheckProof(struct verifier* vrf, const struct symstring* thm);
 
 char*
 verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end);
@@ -243,10 +246,11 @@ void
 verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof);
 
 void
-verifierParseProof(struct verifier* vrf, const struct symstring* thm);
+verifierParseProof(struct verifier* vrf);
 
 void
-verifierParseProvable(struct verifier* vrf, struct symstring* stmt);
+verifierParseProvable(struct verifier* vrf, struct symstring* stmt,
+  struct frame* frm);
 
 void
 verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
@@ -263,6 +267,9 @@ verifierParseBlock(struct verifier* vrf);
 
 void
 verifierBeginReadingFile(struct verifier* vrf, struct reader* r);
+
+void
+verifierSetVerbosity(struct verifier* vrf, size_t verb);
 
 void
 verifierCompile(struct verifier* vrf, const char* in);

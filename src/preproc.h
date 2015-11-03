@@ -7,7 +7,7 @@ struct preproc {
   struct readerArray* rs;
   struct reader* r;
   enum error err;
-  int errCount;
+  size_t errCount;
 };
 
 void
@@ -17,7 +17,7 @@ void
 preprocClean(struct preproc* p);
 
 void
-preprocParseComment(struct preproc* p);
+preprocParseComment(struct preproc* p, FILE* fOut);
 
 void
 preprocParseInclude(struct preproc* p, FILE* fOut);

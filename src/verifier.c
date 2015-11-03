@@ -83,7 +83,6 @@ frameAddDisjoint(struct frame* frm, size_t v1, size_t v2)
 void
 proofInit(struct proof* prf)
 {
-  prf->frm = NULL;
   symstringInit(&prf->dependencies);
   symstringArrayInit(&prf->tags, 1);
 }
@@ -117,8 +116,7 @@ verifierInit(struct verifier* vrf)
   charstringArrayInit(&vrf->files, 1);
 /* add 'none' file */
   charstringInit(&vrf->file_none);
-/* henceforth, no file is allowed to have the name " " */
-  charArrayAppend(&vrf->file_none, " ", 1 + 1);
+  charArrayAppend(&vrf->file_none, "", 1);
   charstringArrayAdd(&vrf->files, vrf->file_none);
   vrf->rId = file_none_id;
   vrf->scope = 0;
@@ -127,6 +125,7 @@ verifierInit(struct verifier* vrf)
   }
   vrf->err = error_none;
   vrf->errc = 0;
+  vrf->verb = 1;
 }
 
 void
@@ -225,7 +224,8 @@ verifierGetFileId(const struct verifier* vrf, const char* file)
 {
   DEBUG_ASSERT(file, "file is NULL");
   size_t i;
-  for (i = 0; i < vrf->files.size; i++) {
+/* don't compare with file_none */
+  for (i = 1; i < vrf->files.size; i++) {
     if (strcmp(vrf->files.vals[i].vals, file) == 0) {
       return i;
     }
@@ -323,7 +323,7 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
   if ((type == symType_floating) || (type == symType_essential)
     || (type == symType_assertion) || (type == symType_provable)) {
     if (!verifierIsValidLabel(vrf, sym)) {
-      H_LOG_ERR(vrf, error_invalidLabel,
+      H_LOG_ERR(vrf, error_invalidLabel, 1,
         "label %s contains an invalid character", sym);
       return symbol_none_id;
     }
@@ -367,7 +367,8 @@ void
 verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
 {
   size_t i, j;
-  LOG_DEBUG("adding entries for each disjoint variable restriction pair");
+  H_LOG_INFO(vrf, 5,
+    "adding entries for each disjoint variable restriction pair");
   if (stmt->size > 0) {
     for (i = 0; i < stmt->size - 1; i++) {
       for (j = i + 1; j < stmt->size; j++) {
@@ -430,14 +431,11 @@ verifierAddAssertion(struct verifier* vrf, const char* sym,
 
 size_t
 verifierAddProvable(struct verifier* vrf, const char* sym,
-  struct symstring* stmt)
+  struct symstring* stmt, struct frame* frm)
 {
   size_t symId = verifierAddSymbol(vrf, sym, symType_provable);
   vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, stmt);
-  struct frame frm; 
-  frameInit(&frm);
-  verifierMakeFrame(vrf, &frm, stmt);
-  vrf->symbols.vals[symId].frame = verifierAddFrame(vrf, &frm);
+  vrf->symbols.vals[symId].frame = verifierAddFrame(vrf, frm);
   return symId;
 }
 
@@ -569,7 +567,7 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
   verifierGetVariables(vrf, &s2, &sub->subs.vals[v2]);
   if (symstringIsIntersecting(&s1, &s2)) {
   /* to do: pretty-print the intersecting set */
-    H_LOG_ERR(vrf, error_invalidSubstitutionOfDisjoint,
+    H_LOG_ERR(vrf, error_invalidSubstitutionOfDisjoint, 1,
       "disjoint variables %s and %s share a variable in their " 
       "substitutions", verifierGetSymName(vrf, varId1), 
       verifierGetSymName(vrf, varId2));
@@ -582,7 +580,8 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
     if (vrf->err) { break; }
     for (j = 0; j < s2.size; j++) {
       if (!frameAreDisjoint(frm, s1.vals[i], s2.vals[j])) {
-        H_LOG_ERR(vrf, error_missingDisjointRestriction,
+/* to do: say which assertion / theorem */
+        H_LOG_ERR(vrf, error_missingDisjointRestriction, 1,
         "the variables %s and %s should be disjoint", 
           verifierGetSymName(vrf, s1.vals[i]),
           verifierGetSymName(vrf, s2.vals[j]));
@@ -639,7 +638,7 @@ verifierPop(struct verifier* vrf)
   vrf->err = error_none;
   if (vrf->stack.size == 0) {
 /* to do: ... in proof of what? */
-    H_LOG_ERR(vrf, error_stackUnderflow,
+    H_LOG_ERR(vrf, error_stackUnderflow, 1,
       "stack is empty");
     return str;
   }
@@ -656,18 +655,18 @@ verifierUnify(struct verifier* vrf, struct substitution* sub,
   if (floating->size != 2) {
     struct charArray ca;
     charArrayInit(&ca, 1);
-    H_LOG_ERR(vrf, error_invalidFloatingStatement,
+    H_LOG_ERR(vrf, error_invalidFloatingStatement, 1,
      "cannot unify with an invalid floating statement %s",
      verifierPrintSym(vrf, &ca, floating));
     return;
   }
   DEBUG_ASSERT(a->size >= 1, "cannot unify empty string");
   if (a->vals[0] != floating->vals[0]) {
-    verifierSetError(vrf, error_mismatchedType);
     struct charArray ca1, ca2;
     charArrayInit(&ca1, 1);
     charArrayInit(&ca2, 1);
-    LOG_ERR("cannot unify %s with %s", verifierPrintSym(vrf, &ca1, a),
+    H_LOG_ERR(vrf, error_mismatchedType, 1,
+      "cannot unify %s with %s", verifierPrintSym(vrf, &ca1, a),
       verifierPrintSym(vrf, &ca2, floating));
     charArrayClean(&ca1);
     charArrayClean(&ca2);
@@ -743,7 +742,7 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
       struct charArray ca1, ca2;
       charArrayInit(&ca1, 1);
       charArrayInit(&ca2, 1);
-      H_LOG_ERR(vrf, error_mismatchedEssentialHypothesis, 
+      H_LOG_ERR(vrf, error_mismatchedEssentialHypothesis, 1,
         "the argument %s does not match hypothesis %s",
         verifierPrintSym(vrf, &ca1, &args.vals[args.size - 1 - i]),
         verifierPrintSym(vrf, &ca2, &pats.vals[argc - 1 - i]));
@@ -785,9 +784,33 @@ verifierApplySymbolToProof(struct verifier* vrf, size_t symId)
     || (sym->type == symType_assertion)) {
     verifierApplyAssertion(vrf, symId);
   } else {
-    H_LOG_ERR(vrf, error_invalidSymbolInProof,
+    H_LOG_ERR(vrf, error_invalidSymbolInProof, 1,
       "%s is %s statement", verifierGetSymName(vrf, symId),
       symTypeString(sym->type));
+  }
+}
+
+/* report errors if the proof is wrong */
+void
+verifierCheckProof(struct verifier* vrf, const struct symstring* thm)
+{
+  if (vrf->stack.size > 1) {
+/* to do: show which terms are unused */
+    H_LOG_ERR(vrf, error_unusedTermInProof, 1,
+      "the proof contains unused terms");
+  }
+  if (vrf->stack.size == 0) {
+    H_LOG_ERR(vrf, error_incorrectProof, 1, "the proof is empty");
+  } else if (!symstringIsEqual(&vrf->stack.vals[0], thm)) {
+    struct charArray res, theorem;
+    charArrayInit(&res, 1);
+    charArrayInit(&theorem, 1);
+    H_LOG_ERR(vrf, error_incorrectProof, 1,
+      "%s was derived but the proof requires %s",
+      verifierPrintSym(vrf, &res, &vrf->stack.vals[0]),
+      verifierPrintSym(vrf, &theorem, thm));
+    charArrayClean(&res);
+    charArrayClean(&theorem);
   }
 }
 
@@ -820,8 +843,8 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
   readerSkip(vrf->r, whitespace);
 /* check for end of file */
   if (vrf->r->err == error_endOfString || vrf->r->err == error_endOfFile) {
-    verifierSetError(vrf, error_unterminatedStatement);
-    LOG_ERR("reached end of file before end of statement");
+    H_LOG_ERR(vrf, error_unterminatedStatement, 1,
+      "reached end of file before end of statement");
     return NULL;
   }
   tok = readerGetToken(vrf->r, whitespace);
@@ -835,7 +858,7 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
     if (tok[1] == end) {
       *isEndOfStatement = 1;
     } else {
-      H_LOG_ERR(vrf, error_unexpectedKeyword,
+      H_LOG_ERR(vrf, error_unexpectedKeyword, 1,
         "expected $%c instead of %s", end, tok);
     }
     return tok;
@@ -862,14 +885,14 @@ verifierParsePreprocFile(struct verifier* vrf)
   if (isEndOfStatement) {
 /* fix me: should we keep track of the file line of the raw preprocessed file to */
 /* report errors like this? */
-    H_LOG_ERR(vrf, error_expectedFilename, "a filename must follow $(");
+    H_LOG_ERR(vrf, error_expectedFilename, 1, "a filename must follow $(");
     return;
   }
   size_t rId = verifierPreprocAddFile(vrf, tok);
   tok = verifierParseSymbol(vrf, &isEndOfStatement, ')');
   if (vrf->r->err) { return; }
   if (isEndOfStatement) {
-    H_LOG_ERR(vrf, error_expectedLineNumber,
+    H_LOG_ERR(vrf, error_expectedLineNumber, 1,
       "a line number must follow filename");
   }
 /* convert the string to a number */
@@ -959,7 +982,7 @@ verifierParseFloating(struct verifier* vrf, struct symstring* stmt)
 {
   verifierParseStatementContent(vrf, stmt, '.');
   if (stmt->size != 2) {
-    H_LOG_ERR(vrf, error_invalidFloatingStatement,
+    H_LOG_ERR(vrf, error_invalidFloatingStatement, 1,
       "invalid floating statement has size %lu, expected 2", stmt->size);
     return;
   }
@@ -981,20 +1004,20 @@ void
 verifierParseEssential(struct verifier* vrf, struct symstring* stmt)
 {
   verifierParseStatementContent(vrf, stmt, '.');
-  LOG_DEBUG("done parsing, checking size");
+  H_LOG_INFO(vrf, 5, "done parsing, checking size");
   if (stmt->size == 0) {
     verifierSetError(vrf, error_invalidEssentialStatement);
     LOG_ERR("essential statements must at least contain a constant symbol");
     return;
   }
-  LOG_DEBUG("checking first symbol is a constant");
+  H_LOG_INFO(vrf, 5, "checking first symbol is a constant");
   DEBUG_ASSERT(stmt->vals[0] < vrf->symbols.size, "invalid symId");
   if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
     verifierSetError(vrf, error_expectedConstantSymbol);
     LOG_ERR("%s is not a constant symbol",
       verifierGetSymName(vrf, stmt->vals[0]));
   }
-  LOG_DEBUG("checking variables are typed");
+  H_LOG_INFO(vrf, 5, "checking variables are typed");
   verifierIsTyped(vrf, stmt);
 }
 
@@ -1035,7 +1058,7 @@ verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
 
 /* thm is the theorem to prove */
 void
-verifierParseProof(struct verifier* vrf, const struct symstring* thm)
+verifierParseProof(struct verifier* vrf)
 {
   vrf->err = error_none;
   int isEndOfProof = 0;
@@ -1043,116 +1066,153 @@ verifierParseProof(struct verifier* vrf, const struct symstring* thm)
   while (!vrf->err && !isEndOfProof) {
     verifierParseProofSymbol(vrf, &isEndOfProof);
   }
-  if (vrf->stack.size > 1) {
-/* to do: show which terms are unused */
-    H_LOG_ERR(vrf, error_unusedTermInProof,
-      "the proof contains unused terms");
-  }
-  if (vrf->stack.size == 0) {
-    H_LOG_ERR(vrf, error_incorrectProof, "the proof is empty");
-  } else if (!symstringIsEqual(&vrf->stack.vals[0], thm)) {
-    struct charArray res, theorem;
-    charArrayInit(&res, 1);
-    charArrayInit(&theorem, 1);
-    H_LOG_ERR(vrf, error_incorrectProof,
-      "%s was derived but the proof requires %s",
-      verifierPrintSym(vrf, &res, &vrf->stack.vals[0]),
-      verifierPrintSym(vrf, &theorem, thm));
-    charArrayClean(&res);
-    charArrayClean(&theorem);
-  }
 }
 
 /* collect the dependencies. We are past the left parenthesis */
-// void
-// verifierParseCompressedProofHeader(struct verifier* vrf, struct proof* prf)
-// {
-//   char* tok;
-//   while (1) {
-//     readerSkip(vrf->r, whitespace);
-//     tok = readerGetToken(vrf->r, whitespace);
-//     if (vrf->r->err) { break; }
-//     size_t len = strlen(tok);
-//     if ((len == 1) && (tok[0] == ')')) {
-//       break;
-//     }
-// /* we have a label to add to dependencies */
-//     size_t symId = verifierGetSymId(vrf, tok);
-//     if (symId == symbol_none_id) {
-//       H_LOG_ERR(vrf, error_undefinedSymbol, "%s was not defined", tok);
-//       continue;
-//     }
-//     symstringAdd(&prf->dependencies, symId);
-//   }
-// }
+void
+verifierParseCompressedProofHeader(struct verifier* vrf, struct proof* prf)
+{
+  char* tok;
+  while (1) {
+    readerSkip(vrf->r, whitespace);
+    tok = readerGetToken(vrf->r, whitespace);
+    if (vrf->r->err) { break; }
+    size_t len = strlen(tok);
+    if ((len == 1) && (tok[0] == ')')) {
+      break;
+    }
+/* we have a label for adding to dependencies */
+    size_t symId = verifierGetSymId(vrf, tok);
+    if (symId == symbol_none_id) {
+      H_LOG_ERR(vrf, error_undefinedSymbol, 1, "%s was not defined", tok);
+      continue;
+    }
+    symstringAdd(&prf->dependencies, symId);
+  }
+}
 
-/* get the next number represented in the compressed proof */
-// size_t
-// verifierParseCompressedProofNumber(struct verifier* vrf, int* isEndOfProof)
-// {
-//   vrf->err = error_none;
-//   const char* base20whitespace = "ABCDEFGHIJKLMNOPQRST \t\r\n\f";
-//   // const char* base5whitespace = "UVWXYZ \t\r\n\f";
-//   size_t i, num;
-//   int c;
-//   *isEndOfProof = 0;
-//   while (1) {
-//     readerSkip(vrf->r, whitespace);
-//     c = readerGet(vrf->r);
-//     if (c == '$') {
-//       c = readerGet(vrf->r);
-//       if (c == '.') {
-//         *isEndOfProof = 1;
-//  // note: 0 is unrepresentable in this compression scheme, so it could be 
-// /* used instead of isEndOfProof */
-//         return 0;
-//       }
-// /* disallow comments inside compressed proofs. */
-//     }
-//   }
-
-//   if ((len == 2) && (tok[0] == '$') && (tok[1] == '.')) {
-//     *isEndOfProof = 1;
-
-//     return 0;
-//   }
-// /* compute the base-5 segment */
-//   size_t base5sum = 0;
-//   size_t power5 = 1;
-//   for (i = len; i > 0; i--) {
-// /* hopefully, tok only contains letters U to Y */
-//     size_t b = tok[i - 1] - 'U' + 1;
-//     base5sum += b * power5;
-//     power5 *= 5;
-//   }
-//   base5sum *= 20;
-
-// }
-
-/* return the symId of the label read */
-// size_t
-// verifierParseCompressedProofSymbol(struct verifier* vrf, struct proof* prf)
-// {
-
-// }
-
-// void
-// verifierParseCompressedProof(struct verifier* vrf, 
-//   const struct symstring* thm, const struct frame* frm)
-// {
-//   struct proof prf;
-//   proofInit(&prf);
-//   prf->frm = frm;
-
-//   proofClean(&prf);
-// }
+/* get the next number represented in the compressed proof. */
+/* fix me: how much error checking should be done on compressed proofs? */
+size_t
+verifierParseCompressedProofNumber(struct verifier* vrf, int* isEndOfProof,
+  int* isTagged)
+{
+  const char* base5 = "UVWXY";
+  const char* base20 = "ABCDEFGHIJKLMNOPQRST";
+  size_t num = 0;
+  int c;
+  *isEndOfProof = 0;
+  *isTagged = 0;
+  vrf->err = error_none;
+  while (1) {
+    readerSkip(vrf->r, whitespace);
+    c = readerGet(vrf->r);
+    if (c == '$') {
+      c = readerGet(vrf->r);
+      if (c == '.') {
+        *isEndOfProof = 1;
+/* note: 0 is unrepresentable in this compression scheme, so it could be */
+/* used instead of isEndOfProof */
+        return 0;
+      }
+    }
+    if (vrf->r->err) {
+      H_LOG_ERR(vrf, error_unterminatedCompressedProof, 1,
+        "compressed proof ended before $.");
+      return 0;
+    }
+    if (strchr(base5, c)) {
+      num = num * 5 + (c - 'U' + 1);
+    } else if (strchr(base20, c)) {
+      num = num * 20 + (c - 'A' + 1);
+/* prepare to look at the next non-whitespace */
+      readerSkip(vrf->r, whitespace);
+      if (readerPeek(vrf->r) == 'Z') {
+/* get rid of the 'Z' */
+        readerGet(vrf->r);
+        *isTagged = 1;
+      }
+      return num;
+    } else {
+      H_LOG_ERR(vrf, error_invalidCharacterInCompressedProof, 1,
+        "%c is invalid", c);
+/* try again until a valid character is found */
+    }
+  }
+}
 
 void
-verifierParseProvable(struct verifier* vrf, struct symstring* stmt)
+verifierParseCompressedProof(struct verifier* vrf, const struct frame* frm)
+{
+  verifierEmptyStack(vrf);
+  struct proof prf;
+  proofInit(&prf);
+  verifierParseCompressedProofHeader(vrf, &prf);
+  int isEndOfProof = 0;
+  while (1) {
+    int isTagged = 0;
+    int isTagRef = 0;
+    size_t i =
+      verifierParseCompressedProofNumber(vrf, &isEndOfProof, &isTagged);
+    if (isEndOfProof) { break; }
+    size_t symId = symbol_none_id;
+    size_t k = prf.tags.size;
+    size_t m = frm->stmts.size;
+    size_t n = prf.dependencies.size;
+/* decode the number. Let m be the number of mandatory hypotheses and let n */
+/* be the number of labels in the header. If 1 <= i <= m, i refers to */
+/* the i-th mandatory hypothesis. If m + 1 <= i <= m + n, i refers to the */
+/* i - m th label in the header. If m + n + 1 <= i, i refers to the */
+/* i - (m + n) th tagged step of the proof. */
+    if ((1 <= i) && (i <= m)) {
+/* the frame is stored in reverse order */
+      symId = frm->stmts.vals[m - i];
+    } else if ((m + 1 <= i) && (i <= m + n)) {
+      symId = prf.dependencies.vals[i - (m + 1)];
+    } else if ((m + n + 1 <= i) && (i <= m + n + k)) {
+/* we have a tag reference */
+      isTagRef = 1;
+    } else {
+      H_LOG_ERR(vrf, error_invalidTagReferenceInCompressedProof, 1,
+        "the compressed proof contains an invalid reference");
+    }
+    if (symId != symbol_none_id) {
+      verifierApplySymbolToProof(vrf, symId);
+    } else if (isTagRef) {
+/* push the symstring to the stack */
+      struct symstring tag;
+      symstringInit(&tag);
+      symstringAppend(&tag, &prf.tags.vals[i - (m + n + 1)]);
+      symstringArrayAdd(&vrf->stack, tag);
+    }
+    if (isTagged) {
+/* add the current result to the tagged list */
+      struct symstring tag;
+      symstringInit(&tag);
+      symstringAppend(&tag, &vrf->stack.vals[vrf->stack.size - 1]);
+      symstringArrayAdd(&prf.tags, tag);
+    }
+  }
+  proofClean(&prf);
+}
+
+void
+verifierParseProvable(struct verifier* vrf, struct symstring* stmt, 
+  struct frame* frm)
 {
   verifierParseStatementContent(vrf, stmt, '=');
   verifierIsTyped(vrf, stmt);
-  verifierParseProof(vrf, stmt);
+  verifierMakeFrame(vrf, frm, stmt);
+/* check if we have a compressed proof */
+  readerSkip(vrf->r, whitespace);
+  if (readerPeek(vrf->r) == '(') {
+/* get rid of the ( */
+    readerGet(vrf->r);
+    verifierParseCompressedProof(vrf, frm);
+  } else {
+    verifierParseProof(vrf);
+  }
+  verifierCheckProof(vrf, stmt);
 }
 
 /* parse $c, $v, or $d statements, or a ${ block. */
@@ -1162,7 +1222,7 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
 {
   size_t len = strlen(tok);
   if (len != 2) {
-    H_LOG_ERR(vrf, error_invalidKeyword, "%s is not a keyword", tok);
+    H_LOG_ERR(vrf, error_invalidKeyword, 1, "%s is not a keyword", tok);
     return;
   }
   if (tok[1] == '(') {
@@ -1183,7 +1243,7 @@ verifierParseUnlabelledStatement(struct verifier* vrf, int* isEndOfScope,
   } else if (tok[1] == '}') {
     *isEndOfScope = 1;
   } else {
-    H_LOG_ERR(vrf, error_unexpectedKeyword,
+    H_LOG_ERR(vrf, error_unexpectedKeyword, 1,
       "expected $c, $v, $d, ${, or $} instead of %s", tok);
   }
 }
@@ -1199,7 +1259,7 @@ verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
   readerSkip(vrf->r, whitespace);
   char* keyword = readerGetToken(vrf->r, whitespace);
   if (vrf->r->err) {
-    H_LOG_ERR(vrf, error_expectedKeyword,
+    H_LOG_ERR(vrf, error_expectedKeyword, 1,
       "expected keyword after label %s", tok);
     return;
   }
@@ -1238,8 +1298,10 @@ verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
     type = symType_provable;
     struct symstring stmt;
     symstringInit(&stmt);
-    verifierParseProvable(vrf, &stmt);
-    verifierAddProvable(vrf, tok, &stmt);
+    struct frame frm; 
+    frameInit(&frm);
+    verifierParseProvable(vrf, &stmt, &frm);
+    verifierAddProvable(vrf, tok, &stmt, &frm);
   }
   if (type == symType_none) {
     verifierSetError(vrf, error_unexpectedKeyword);
@@ -1263,7 +1325,7 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
 /* note: strchr(s, 0) is always true. vrf->r->last is initialized to 0, so */
 /* empty files shouldn't raise this error */
     if (!strchr("\n\f", vrf->r->last)) {
-      H_LOG_ERR(vrf, error_expectedNewLine,
+      H_LOG_ERR(vrf, error_expectedNewLine, 1,
         "expected new line at the end of file");
     }
     return;
@@ -1301,6 +1363,12 @@ void
 verifierBeginReadingFile(struct verifier* vrf, struct reader* r)
 {
   vrf->r = r;
+}
+
+void
+verifierSetVerbosity(struct verifier* vrf, size_t verb)
+{
+  vrf->verb = verb;
 }
 
 /* to do: have an output file, for compressed proofs */

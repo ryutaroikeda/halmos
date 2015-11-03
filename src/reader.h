@@ -43,6 +43,10 @@ readerGetFilename(struct reader* r);
 int
 readerGet(struct reader* r);
 
+/* get the next char but put it back */
+int
+readerPeek(struct reader* r);
+
 char*
 readerGetToken(struct reader* r, const char* delimiter);
 
@@ -51,22 +55,6 @@ readerSkip(struct reader* r, const char* skip);
 
 void
 readerFind(struct reader* r, const char* find);
-
-/* initialize the reader depending on mode */
-/* if mode is "f" then open the file filename */
-/* if mode is "s" then begin reading the string filename */
-void
-readerOpen(struct reader* r, const char* filename, const char* mode);
-
-/* if a file was opened, close it */
-void
-readerClose(struct reader* r);
-
-int
-readerIsString(const struct reader* r);
-
-int
-readerIsFile(const struct reader* r);
 
 typedef struct reader reader;
 DECLARE_ARRAY(reader)

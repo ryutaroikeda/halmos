@@ -49,6 +49,7 @@ preprocIsFresh(const struct preproc* p, const char* filename)
 char*
 preprocParseSymbol(struct preproc* p, int* isEnd, int end)
 {
+  readerSkip(p->r, whitespace);
   char* tok = readerGetToken(p->r, whitespace);
   size_t len = strlen(tok);
   if (len == 2) {
@@ -64,18 +65,26 @@ preprocParseSymbol(struct preproc* p, int* isEnd, int end)
 }
 
 void
-preprocParseComment(struct preproc* p)
+preprocParseComment(struct preproc* p, FILE* fOut)
 {
   while (!p->r->err) {
-    readerFind(p->r, "$");
-    char* tok = readerGetToken(p->r, whitespace);
+    readerFind(p->r, "$\n");
+    int c = readerGet(p->r);
     if (p->r->err) { break; }
-    if (strlen(tok) != 2) { continue; }
-    if (tok[1] == ')') { break; }
-    if (tok[1] == '(') {
+    if (c == '\n') {
+/* emit a newline to keep line number in sync */
+      fprintf(fOut, "\n");
+      continue;
+    }
+/* look at the char after $ */
+    c = readerGet(p->r);
+    if (p->r->err) { break; }
+    if (c == ')') { break; }
+    
+    if (c == '(') {
       P_LOG_ERR(p, error_nestedComment, "comments cannot be nested");
       p->err = error_none;
-      preprocParseComment(p);
+      preprocParseComment(p, fOut);
       break;
     }
   }
@@ -88,7 +97,6 @@ void
 preprocParseInclude(struct preproc* p, FILE* fOut)
 {
   int isEnd = 0;
-  readerSkip(p->r, whitespace);
   char* tok = preprocParseSymbol(p, &isEnd, ']');
   if (p->r->err) {
     return;
@@ -144,7 +152,7 @@ preprocParseFile(struct preproc* p, const char* in, FILE* fOut)
       c = readerGet(p->r);
       if (p->r->err) { break; }
       if (c == '(') {
-        preprocParseComment(p);
+        preprocParseComment(p, fOut);
       } else if (c == '[') {
         preprocParseInclude(p, fOut);
       } else {

@@ -120,26 +120,41 @@ Test_readerFind(void)
 }
 
 static int
-Test_readerOpen(void)
+Test_readerPeek(void)
 {
-  const char* filename = "To lead you to an overwhelming question ...";
+  const char* f = "The yellow fog that rubs its back upon the window-panes,";
+  size_t i;
   struct reader r;
-  readerOpen(&r, filename, "s");
-  ut_assert(r.err == error_none, "err = %s, expected none",
-    errorString(r.err));
+  readerInitString(&r, f);
+  for (i = 0; i < strlen(f); i++) {
+    int c = readerPeek(&r);
+    int d = readerGet(&r);
+    ut_assert(d == c, "got %c, expected %c", d, c);
+  }
   return 0;
 }
 
-static int
-Test_readerClose(void)
-{
-  struct reader r;
-  readerOpen(&r, "Oh, do not ask, \"What is it?\"", "s");
-  readerClose(&r);
-  ut_assert(r.err == error_none, "err = %s, expected none",
-    errorString(r.err));
-  return 0;
-}
+// static int
+// Test_readerOpen(void)
+// {
+//   const char* filename = "To lead you to an overwhelming question ...";
+//   struct reader r;
+//   readerOpen(&r, filename, "s");
+//   ut_assert(r.err == error_none, "err = %s, expected none",
+//     errorString(r.err));
+//   return 0;
+// }
+
+// static int
+// Test_readerClose(void)
+// {
+//   struct reader r;
+//   readerOpen(&r, "Oh, do not ask, \"What is it?\"", "s");
+//   readerClose(&r);
+//   ut_assert(r.err == error_none, "err = %s, expected none",
+//     errorString(r.err));
+//   return 0;
+// }
 
 static int
 all()
@@ -148,8 +163,7 @@ all()
   ut_run(Test_readerGetToken);
   ut_run(Test_readerSkip);
   ut_run(Test_readerFind);
-  ut_run(Test_readerOpen);
-  ut_run(Test_readerClose);
+  ut_run(Test_readerPeek);
   return 0;
 }
 

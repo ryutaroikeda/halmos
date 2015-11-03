@@ -2,6 +2,7 @@
 #include "halmos.h"
 #include "preproc.h"
 #include "verifier.h"
+#include <errno.h>
 #include <stdio.h>
 
 static const char* flags[halmosflag_size] = {
@@ -9,13 +10,19 @@ static const char* flags[halmosflag_size] = {
   "--verbose",
   "--summary",
   "--preproc",
+  "--no-preproc",
+  "--no-verify",
+  // "--include",
 };
 
 static const size_t flagsArgc[halmosflag_size] = {
   0, /* none */
-  0, /* verbose */
+  1, /* verbose */
   0, /* summary */
   1, /* preproc - the output file */
+  0, /* no-preproc */
+  0, /* no-verify */
+  // 0, /* include */
 };
 
 void
@@ -42,12 +49,26 @@ halmosCompile(struct halmos* h, const char* filename)
   struct preproc p;
   verifierInit(&vrf);
   preprocInit(&p);
-  if (h->flags[halmosflag_preproc]) {
+  if (h->flags[halmosflag_verbose]) {
+    errno = 0;
+    size_t verb = strtoul(h->flagsArgv[halmosflag_verbose][0], NULL, 10);
+    if (errno) {
+      printf("%s requires a positive integer\n", flags[halmosflag_verbose]);
+      h->flags[halmosflag_no_preproc] = 1;
+      h->flags[halmosflag_no_verify] = 1;
+    } else {
+      verifierSetVerbosity(&vrf, verb);
+    }
+  }
+  if (!h->flags[halmosflag_no_preproc]) {
     printf("------preproc\n");
-    preprocCompile(&p, filename, h->flagsArgv[halmosflag_preproc][0]);
-  } else {
-    printf("------preproc\n");
+    printf("------%s\n", filename);
     preprocCompile(&p, filename, "out.mm");
+    printf("Found %lu errors\n", p.errCount);
+  }
+/* don't compile if preproc was specified */
+  if (!h->flags[halmosflag_preproc] && !h->flags[halmosflag_no_verify]) {
+    printf("------verifier\n");
     verifierCompile(&vrf, "out.mm");
     printf("Found %lu errors\n", vrf.errc);
   }
@@ -94,6 +115,10 @@ halmosMain(int argc, char* argv[])
       printf("%s takes %lu arguments\n", flags[flag], flagsArgc[flag]);
       return 0;
     }
+  }
+  if (i > argc) {
+    printf("Missing input file\n");
+    return 0;
   }
   halmosCompile(&h, argv[argc - 1]);
   halmosClean(&h);

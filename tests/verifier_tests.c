@@ -326,10 +326,13 @@ Test_verifierUnify(void)
   const size_t floatingVals[2] = {type, var};
   const size_t floatingVals2[2] = {type2, var};
   struct verifier vrf;
+  struct reader r;
   struct substitution sub;
   struct symstring str;
   struct symstring floating;
   verifierInit(&vrf);
+  readerInitString(&r, "");
+  verifierBeginReadingFile(&vrf, &r);
   verifierAddSymbolExplicit(&vrf, "type", symType_constant, 0, 0, 0, 0, 0, 0,
     0, 0);
   verifierAddSymbolExplicit(&vrf, "v", symType_variable, 0, 0, 0, 0, 0, 0, 0,
@@ -354,6 +357,7 @@ Test_verifierUnify(void)
   symstringClean(&str);
   symstringClean(&floating);
   substitutionClean(&sub);
+  readerClean(&r);
   verifierClean(&vrf);
   return 0;
 }
@@ -844,7 +848,8 @@ Test_verifierParseProof(void)
 #define test_file(f, error) \
 do { \
   verifierBeginReadingFile(&vrf, &r[f]); \
-  verifierParseProof(&vrf, &thms[f]); \
+  verifierParseProof(&vrf); \
+  verifierCheckProof(&vrf, &thms[f]); \
   check_err(vrf.err, error); \
   readerClean(&r[f]); \
 } while (0)
@@ -902,8 +907,11 @@ Test_verifierParseProvable(void)
     struct symstring stmt;
     symstringInit(&stmt);
     verifierBeginReadingFile(&vrf, &r[i]);
-    verifierParseProvable(&vrf, &stmt);
+    struct frame frm;
+    frameInit(&frm);
+    verifierParseProvable(&vrf, &stmt, &frm);
     check_err(vrf.err, errs[i]);
+    frameClean(&frm);
     symstringClean(&stmt);
     readerClean(&r[i]);
   }
@@ -986,9 +994,9 @@ Test_verifierParseStatement(void)
     "$v x y z w $. ",
     "num_x $f number x $. ",
     "num_y $f number y $. ",
-    "ess $e |- number x + y $. ",
-    "asr $a |- number x + 0 + y $. ",
-    "thm $p |- number x + y + 0 + x $= ess num_x asr $. ",
+    "ess $e number x + y $. ",
+    "asr $a number x + 0 + y $. ",
+    "thm $p number x + y + 0 + x $= ess num_x asr $. ",
     "$d x y $. ",
     " ",
     "$Streets |- that follow $( like $v a tedious argument $. $. ",
@@ -1027,7 +1035,7 @@ Test_verifierParseStatement(void)
 static int
 Test_verifierParseBlock(void)
 {
-  enum { file_size = 2 };
+  enum { file_size = 3 };
   const char* file[file_size] = {
 /* file 0 */
     "$c |- wff S 0 $. "
@@ -1046,11 +1054,23 @@ Test_verifierParseBlock(void)
     "num.x $f num x $. "
     "a.num.succ $a num S x $. "
     "thm.one $p num S 0 $= a.num.0 a.num.succ $. "
-    "thm.succ2 $p num S S x $= num.x a.num.succ a.num.succ $.\n"
+    "thm.succ2 $p num S S x $= num.x a.num.succ a.num.succ $.\n",
+/* file 2 - test compressed proof */
+    "$c |- num S 0 $. $v x y $. "
+    "num.0 $a |- num 0 $. "
+    "num.x $f num x $. "
+    "num.succ $a |- num S x $. "
+    "thm $p |- num S 0 $= ( num.0 num.succ ) "
+    "AB $. \n",
+/* file 3 - test disjoint variable restriction */
+    // "$c "
+/* to do: write test with Z tag */
+
   };
   const enum error errs[file_size] = {
     error_none,
     error_none,
+    error_none
   };
   size_t i;
   for (i = 0; i < file_size; i++) {

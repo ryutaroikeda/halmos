@@ -1,6 +1,16 @@
-#Halmos
+Halmos
 A verifier for metamath (www.metamath.org)
 
-Differences between Halmos and the metamath specification
-File inclusion with $[ $] will only export global symbols, i.e. $c, $a, and $p
-statements
+Bugs:
+[verifier] hol.mm does not compile.
+
+Possible bugs:
+[verifier] disjoint-variable restriction
+
+To do:
+[verifier] write compressed proof
+[halmos] specify search path from front end
+[halmos] design language
+
+Optional:
+[all] set logging level

@@ -6,6 +6,9 @@ enum halmosflag {
   halmosflag_verbose,
   halmosflag_summary,
   halmosflag_preproc,
+  halmosflag_no_preproc,
+  halmosflag_no_verify,
+  // halmosflag_include,
   halmosflag_size
 };
 

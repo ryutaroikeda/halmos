@@ -92,6 +92,19 @@ readerGet(struct reader* r)
   return c;
 }
 
+int
+readerPeek(struct reader* r)
+{
+  if (r->didSkip) {
+    return r->skipped;
+  } else {
+    int c = readerGet(r);
+    r->didSkip = 1;
+    r->skipped = c;
+    return c;
+  }
+}
+
 char*
 readerGetToken(struct reader* r, const char* delimiters)
 {
@@ -143,48 +156,6 @@ void
 readerFind(struct reader* r, const char* find)
 {
   readerSkipExplicit(r, find, 0);
-}
-
-void
-readerOpen(struct reader* r, const char* filename, const char* mode)
-{
-  DEBUG_ASSERT(filename, "filename is NULL");
-  DEBUG_ASSERT(mode, "mode is NULL");
-  r->err = error_none;
-  if (strcmp(mode, "f") == 0) {
-    FILE* f = fopen(filename, "r");
-    if (!f) {
-      r->err = error_failedFileOpen;
-      return;
-    }
-    readerInitFile(r, f, filename);
-  } else if (strcmp(mode, "s") == 0) {
-    readerInitString(r, filename);
-  } else {
-    r->err = error_invalidReaderMode;
-  }
-}
-
-void
-readerClose(struct reader* r)
-{
-  r->err = error_none;
-  if (r->mode != mode_file) { return; }
-  if (fclose(r->stream.f) != 0) {
-    r->err = error_failedFileClose;
-  }
-}
-
-int
-readerIsString(const struct reader* r)
-{
-  return r->mode == mode_string;
-}
-
-int
-readerIsFile(const struct reader* r)
-{
-  return r->mode == mode_file;
 }
 
 DEFINE_ARRAY(reader)

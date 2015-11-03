@@ -1,9 +1,10 @@
 #ifndef _HALMOSLOGGER_H_
 #define _HALMOSLOGGER_H_
 
-#define H_LOG(vrf, err, lab, ...) \
+/* logging with the verifier */
+#define H_LOG(vrf, err, verbosity, lab, ...) \
 do { \
-  verifierSetError(vrf, err); \
+  if (vrf->verb < (verbosity)) { break; } \
   fprintf(stderr, "%s:%lu:%lu " lab " [%s] ", \
     vrf->files.vals[vrf->rId].vals, \
     vrf->r->line, \
@@ -32,9 +33,17 @@ do { \
   fprintf(stderr, "\n"); \
 } while (0)
 
-#define H_LOG_ERR(vrf, err, ...) H_LOG(vrf, err, "error", __VA_ARGS__)
+#define H_LOG_ERR(vrf, err, verb, ...) \
+do { \
+  verifierSetError(vrf, err); \
+  H_LOG(vrf, err, verb, "error", __VA_ARGS__); \
+} while (0)
 
-#define H_LOG_WARN(vrf, err, ...) H_LOG(vrf, err, "warning", __VA_ARGS__)
+#define H_LOG_WARN(vrf, err, verb, ...) \
+H_LOG(vrf, err, verb, "warning", __VA_ARGS__)
+
+#define H_LOG_INFO(vrf, verb, ...) \
+H_LOG(vrf, error_none, verb, "info", __VA_ARGS__)
 
 #define G_LOG_ERR(vrf, err, ...) G_LOG(vrf, err, "error", __VA_ARGS__)
 

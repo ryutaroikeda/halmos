@@ -42,6 +42,9 @@ static const char* errorStrings[error_size] = {
   "unusedTermInProof",
   "incorrectProof",
   "invalidCompressedProof",
+  "invalidCharacterInCompressedProof",
+  "unterminatedCompressedProof",
+  "invalidTagReferenceInCompressedProof",
   "invalidFile",
   "expectedFilename",
   "unexpectedFilename"
