@@ -199,19 +199,21 @@ verifierMakeFrame(struct verifier* vrf, struct frame* frm,
 
 int
 verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
- const struct frame* frm, const struct substitution* sub, size_t v1,
+  const struct frame* ctx, const struct frame* frm,
+  const struct substitution* sub, size_t v1,
  size_t v2);
 
 int
-verifierIsValidSubstitution(struct verifier* vrf, const struct frame* frm,
-  const struct substitution* sub);
+verifierIsValidSubstitution(struct verifier* vrf, const struct frame* ctx,
+  const struct frame* frm, const struct substitution* sub);
 
 void
 verifierUnify(struct verifier* vrf, struct substitution* sub, 
   const struct symstring* a, const struct symstring* floating);
 
 void
-verifierApplyAssertion(struct verifier* vrf, size_t symId);
+verifierApplyAssertion(struct verifier* vrf, const struct frame* ctx,
+  size_t symId);
 
 void
 verifierCheckProof(struct verifier* vrf, const struct symstring* thm);
@@ -243,10 +245,11 @@ void
 verifierParseAssertion(struct verifier* vrf, struct symstring* stmt);
 
 void
-verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof);
+verifierParseProofSymbol(struct verifier* vrf, const struct frame* ctx,
+  int* isEndOfProof);
 
 void
-verifierParseProof(struct verifier* vrf);
+verifierParseProof(struct verifier* vrf, const struct frame* ctx);
 
 void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt,

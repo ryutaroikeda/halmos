@@ -43,7 +43,7 @@ do { \
 H_LOG(vrf, err, verb, "warning", __VA_ARGS__)
 
 #define H_LOG_INFO(vrf, verb, ...) \
-H_LOG(vrf, error_none, verb, "info", __VA_ARGS__)
+H_LOG(vrf, vrf->err, verb, "info", __VA_ARGS__)
 
 #define G_LOG_ERR(vrf, err, ...) G_LOG(vrf, err, "error", __VA_ARGS__)
 

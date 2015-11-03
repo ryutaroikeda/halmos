@@ -2,10 +2,10 @@ Halmos
 A verifier for metamath (www.metamath.org)
 
 Bugs:
+[verifier] some disjoint-variable restrictions are not being added 
 [verifier] hol.mm does not compile.
 
 Possible bugs:
-[verifier] disjoint-variable restriction
 
 To do:
 [verifier] write compressed proof
@@ -14,3 +14,11 @@ To do:
 
 Optional:
 [all] set logging level
+
+	Logging
+Logging levels
+0 = do not log
+1 = errors
+...
+5 = name of function
+6 = steps within function

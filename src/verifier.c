@@ -205,7 +205,6 @@ verifierPrintSym(const struct verifier* vrf, struct charArray* msg,
   const struct symstring* str)
 {
   size_t i;
-  msg->size = 0;
   for (i = 0; i < str->size; i++) {
     const char* name = verifierGetSymName(vrf, str->vals[i]);
     charArrayAppend(msg, name, strlen(name));
@@ -214,6 +213,43 @@ verifierPrintSym(const struct verifier* vrf, struct charArray* msg,
 /* get rid of the extra space */
   if (msg->size > 0) {
     msg->size--;
+  }
+  charArrayAdd(msg, '\0');
+  return msg->vals;
+}
+
+const char*
+verifierPrintFrame(const struct verifier* vrf, struct charArray* msg,
+  const struct frame* frm)
+{
+  // const char* h1 = "frame of ";
+  const char* h2 = "mandatory hypotheses:\n";
+  const char* h3 = "disjoint variable restrictions:\n";
+  size_t i;
+  // charArrayAppend(msg, h1, strlen(h1));
+  // charArrayAppend(msg, sym->sym.vals, strlen(sym->sym.vals));
+  charArrayAppend(msg, h2, strlen(h2));
+  for (i = 0; i < frm->stmts.size; i++) {
+    const struct symbol* s = &vrf->symbols.vals[frm->stmts.vals[i]];
+    const char* type = symTypeString(s->type);
+    const char* name = s->sym.vals;
+    charArrayAppend(msg, type, strlen(type));
+    charArrayAdd(msg, ' ');
+    charArrayAppend(msg, name, strlen(name));
+    charArrayAppend(msg, ": ", 2);
+    verifierPrintSym(vrf, msg, &vrf->stmts.vals[s->stmt]);
+/* get rid of the \0 */
+    msg->size--;
+    charArrayAdd(msg, '\n');
+  }
+  charArrayAppend(msg, h3, strlen(h3));
+  for (i = 0; i < frm->disjoint1.size; i++) {
+    const char* var1 = verifierGetSymName(vrf, frm->disjoint1.vals[i]);
+    const char* var2 = verifierGetSymName(vrf, frm->disjoint2.vals[i]);
+    charArrayAppend(msg, var1, strlen(var1));
+    charArrayAdd(msg, ' ');
+    charArrayAppend(msg, var2, strlen(var2));
+    charArrayAdd(msg, '\n');
   }
   charArrayAdd(msg, '\0');
   return msg->vals;
@@ -333,6 +369,7 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
     vrf->r->line, vrf->r->offset);
 /* for $d, $f, $e, or $v, update the active list */
   if (type == symType_disjoint) {
+/* this is actually never called because AddDisjoint calls AddSymExplicit */
     symstringAdd(&vrf->disjoints, symId);
   } else if (type == symType_floating || type == symType_essential) {
     symstringAdd(&vrf->hypotheses, symId);
@@ -367,7 +404,7 @@ void
 verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
 {
   size_t i, j;
-  H_LOG_INFO(vrf, 5,
+  H_LOG_INFO(vrf, 4,
     "adding entries for each disjoint variable restriction pair");
   if (stmt->size > 0) {
     for (i = 0; i < stmt->size - 1; i++) {
@@ -381,6 +418,9 @@ verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
         symstringAdd(&pair, stmt->vals[i]);
         symstringAdd(&pair, stmt->vals[j]);
         vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, &pair);
+        H_LOG_INFO(vrf, 5, "added $d %s %s $.", 
+          verifierGetSymName(vrf, stmt->vals[i]),
+          verifierGetSymName(vrf, stmt->vals[j]));
       }
     }
   }
@@ -443,6 +483,7 @@ verifierAddProvable(struct verifier* vrf, const char* sym,
 void
 verifierDeactivateSymbols(struct verifier* vrf)
 {
+  H_LOG_INFO(vrf, 4, "deactivating symbols going out of scope");
   size_t i;
   size_t scope = vrf->scope;
   struct symstring* disjoints = &vrf->disjoints;
@@ -531,7 +572,6 @@ verifierMakeFrame(struct verifier* vrf, struct frame* frm,
   symstringClean(&varset);
 }
 
-/* v1 and v2 are indices into sub->vars */
 /* From the metamath specification: */
 /* */
 /* Each substitution made in a proof must be checked to verify that any */
@@ -543,10 +583,15 @@ verifierMakeFrame(struct verifier* vrf, struct frame* frm,
 /* each possible pair of variables, one from each expression, must exist in */
 /* an active $d statement of the $p statement containing the proof. */
 /* */
+/* ctx is the frame of the theorem being proved */
+/* frm is the frame of the assertion or theorem being applied */
+/* v1 and v2 are indices into sub->vars */
+/* v1 and v2 must refer to variables with the disjoint restriction in frame */
+/* frm. */
 int
-verifierIsValidDisjointPairSubstitution(struct verifier* vrf, 
-  const struct frame* frm, const struct substitution* sub, size_t v1,
-   size_t v2)
+verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
+  const struct frame* ctx, const struct frame* frm,
+  const struct substitution* sub, size_t v1, size_t v2)
 {
   vrf->err = error_none;
   DEBUG_ASSERT(sub->vars.size == sub->subs.size, "invalid substitution");
@@ -574,12 +619,12 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
   }
 /* don't do this if there already was an error above. */
 /* Check each pair of variables from s1 and s2 have the disjoint variable */
-/* restriction on them */
+/* restriction on them inside the context */
   size_t i, j;
   for (i = 0; i < s1.size; i++) {
     if (vrf->err) { break; }
     for (j = 0; j < s2.size; j++) {
-      if (!frameAreDisjoint(frm, s1.vals[i], s2.vals[j])) {
+      if (!frameAreDisjoint(ctx, s1.vals[i], s2.vals[j])) {
 /* to do: say which assertion / theorem */
         H_LOG_ERR(vrf, error_missingDisjointRestriction, 1,
         "the variables %s and %s should be disjoint", 
@@ -587,6 +632,14 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
           verifierGetSymName(vrf, s2.vals[j]));
         break;
       }
+    }
+    if (vrf->err) {
+/* fix me: roll my own printf to avoid doing this */
+      struct charArray msg;
+      charArrayInit(&msg, 1);
+      H_LOG_INFO(vrf, 2, "the current frame is\n%s",
+       verifierPrintFrame(vrf, &msg, frm));
+      charArrayClean(&msg);
     }
   }
 /* clean up */
@@ -596,9 +649,11 @@ verifierIsValidDisjointPairSubstitution(struct verifier* vrf,
 }
 
 /* ensure that the substitution respects the disjoint-variable restriction */
+/* ctx is the frame of the theorem being proved */
+/* frm is the frame of the assertion or theorem being applied */
 int
-verifierIsValidSubstitution(struct verifier* vrf, const struct frame* frm,
-  const struct substitution* sub)
+verifierIsValidSubstitution(struct verifier* vrf, const struct frame* ctx,
+  const struct frame* frm, const struct substitution* sub)
 {
   vrf->err = error_none;
   if (sub->vars.size == 0) { return 1; }
@@ -608,7 +663,7 @@ verifierIsValidSubstitution(struct verifier* vrf, const struct frame* frm,
       if (!frameAreDisjoint(frm, sub->vars.vals[i], sub->vars.vals[j])) { 
         continue;
       }
-      if (!verifierIsValidDisjointPairSubstitution(vrf, frm, sub, i, j)) {
+      if (!verifierIsValidDisjointPairSubstitution(vrf, ctx, frm, sub, i, j)) {
         return 0;
       }
     }
@@ -680,14 +735,17 @@ verifierUnify(struct verifier* vrf, struct substitution* sub,
 
 /* use an assertion or a theorem. Pop the appropriate number of entries, */
 /* type-check, do unification and push the result */
+/* ctx is the frame of the theorem being proved */
 void
-verifierApplyAssertion(struct verifier* vrf, size_t symId)
+verifierApplyAssertion(struct verifier* vrf, const struct frame* ctx,
+  size_t symId)
 {
   size_t i;
   vrf->err = error_none;
   DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId %lu", symId);
   const struct symbol* sym = &vrf->symbols.vals[symId];
   DEBUG_ASSERT(sym->frame < vrf->frames.size, "invalid frame %lu", sym->frame);
+/* frame of the assertion or theorem being applied */
   const struct frame* frm = &vrf->frames.vals[sym->frame];
   const size_t argc = frm->stmts.size;
 /* we pop into this array. The last one out is the first argument to the */
@@ -728,7 +786,7 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
   }
 /* check that the disjoint-variable restrictions are satisfied. If invalid, */
 /* vrf->err will be set */
-  verifierIsValidSubstitution(vrf, frm, &sub);
+  verifierIsValidSubstitution(vrf, ctx, frm, &sub);
 /* apply the substitution to $e hypotheses and check if they match the args */
   for (i = 0; i < args.size; i++) {
     if (vrf->err) { break; }
@@ -771,8 +829,10 @@ verifierApplyAssertion(struct verifier* vrf, size_t symId)
 /* apply the label with symId to the current proof. If it is $f or $e, */
 /* we push it to the stack. If it is $a or $p, we apply the assertion and */
 /* push the result */
+/* ctx is the frame of the theorem being proved */
 void
-verifierApplySymbolToProof(struct verifier* vrf, size_t symId)
+verifierApplySymbolToProof(struct verifier* vrf, const struct frame* ctx,
+  size_t symId)
 {
   DEBUG_ASSERT(symId < vrf->symbols.size, "invalid symId");
   const struct symbol* sym = &vrf->symbols.vals[symId];
@@ -782,7 +842,7 @@ verifierApplySymbolToProof(struct verifier* vrf, size_t symId)
     verifierPushSymbol(vrf, symId);
   } else if ((sym->type == symType_provable) 
     || (sym->type == symType_assertion)) {
-    verifierApplyAssertion(vrf, symId);
+    verifierApplyAssertion(vrf, ctx, symId);
   } else {
     H_LOG_ERR(vrf, error_invalidSymbolInProof, 1,
       "%s is %s statement", verifierGetSymName(vrf, symId),
@@ -1003,21 +1063,22 @@ verifierParseFloating(struct verifier* vrf, struct symstring* stmt)
 void
 verifierParseEssential(struct verifier* vrf, struct symstring* stmt)
 {
+  H_LOG_INFO(vrf, 5, "parsing essential statement");
   verifierParseStatementContent(vrf, stmt, '.');
-  H_LOG_INFO(vrf, 5, "done parsing, checking size");
+  H_LOG_INFO(vrf, 6, "done parsing essential statement, checking size");
   if (stmt->size == 0) {
     verifierSetError(vrf, error_invalidEssentialStatement);
     LOG_ERR("essential statements must at least contain a constant symbol");
     return;
   }
-  H_LOG_INFO(vrf, 5, "checking first symbol is a constant");
+  H_LOG_INFO(vrf, 6, "checking first symbol is a constant");
   DEBUG_ASSERT(stmt->vals[0] < vrf->symbols.size, "invalid symId");
   if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
     verifierSetError(vrf, error_expectedConstantSymbol);
     LOG_ERR("%s is not a constant symbol",
       verifierGetSymName(vrf, stmt->vals[0]));
   }
-  H_LOG_INFO(vrf, 5, "checking variables are typed");
+  H_LOG_INFO(vrf, 6, "checking variables are typed");
   verifierIsTyped(vrf, stmt);
 }
 
@@ -1038,8 +1099,10 @@ verifierParseAssertion(struct verifier* vrf, struct symstring* stmt)
   verifierIsTyped(vrf, stmt);
 }
 
+/* ctx is the frame of the theorem being proved */
 void
-verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
+verifierParseProofSymbol(struct verifier* vrf, const struct frame* ctx,
+  int* isEndOfProof)
 {
   char* tok;
   vrf->err = error_none;
@@ -1053,18 +1116,18 @@ verifierParseProofSymbol(struct verifier* vrf, int* isEndOfProof)
     LOG_ERR("%s was not defined", tok);
     return;
   }
-  verifierApplySymbolToProof(vrf, symId);
+  verifierApplySymbolToProof(vrf, ctx, symId);
 }
 
 /* thm is the theorem to prove */
 void
-verifierParseProof(struct verifier* vrf)
+verifierParseProof(struct verifier* vrf, const struct frame* ctx)
 {
   vrf->err = error_none;
   int isEndOfProof = 0;
   verifierEmptyStack(vrf);
   while (!vrf->err && !isEndOfProof) {
-    verifierParseProofSymbol(vrf, &isEndOfProof);
+    verifierParseProofSymbol(vrf, ctx, &isEndOfProof);
   }
 }
 
@@ -1141,8 +1204,9 @@ verifierParseCompressedProofNumber(struct verifier* vrf, int* isEndOfProof,
   }
 }
 
+/* ctx is the frame of the theorem being proved */
 void
-verifierParseCompressedProof(struct verifier* vrf, const struct frame* frm)
+verifierParseCompressedProof(struct verifier* vrf, const struct frame* ctx)
 {
   verifierEmptyStack(vrf);
   struct proof prf;
@@ -1157,7 +1221,7 @@ verifierParseCompressedProof(struct verifier* vrf, const struct frame* frm)
     if (isEndOfProof) { break; }
     size_t symId = symbol_none_id;
     size_t k = prf.tags.size;
-    size_t m = frm->stmts.size;
+    size_t m = ctx->stmts.size;
     size_t n = prf.dependencies.size;
 /* decode the number. Let m be the number of mandatory hypotheses and let n */
 /* be the number of labels in the header. If 1 <= i <= m, i refers to */
@@ -1166,7 +1230,7 @@ verifierParseCompressedProof(struct verifier* vrf, const struct frame* frm)
 /* i - (m + n) th tagged step of the proof. */
     if ((1 <= i) && (i <= m)) {
 /* the frame is stored in reverse order */
-      symId = frm->stmts.vals[m - i];
+      symId = ctx->stmts.vals[m - i];
     } else if ((m + 1 <= i) && (i <= m + n)) {
       symId = prf.dependencies.vals[i - (m + 1)];
     } else if ((m + n + 1 <= i) && (i <= m + n + k)) {
@@ -1177,7 +1241,7 @@ verifierParseCompressedProof(struct verifier* vrf, const struct frame* frm)
         "the compressed proof contains an invalid reference");
     }
     if (symId != symbol_none_id) {
-      verifierApplySymbolToProof(vrf, symId);
+      verifierApplySymbolToProof(vrf, ctx, symId);
     } else if (isTagRef) {
 /* push the symstring to the stack */
       struct symstring tag;
@@ -1198,19 +1262,19 @@ verifierParseCompressedProof(struct verifier* vrf, const struct frame* frm)
 
 void
 verifierParseProvable(struct verifier* vrf, struct symstring* stmt, 
-  struct frame* frm)
+  struct frame* ctx)
 {
   verifierParseStatementContent(vrf, stmt, '=');
   verifierIsTyped(vrf, stmt);
-  verifierMakeFrame(vrf, frm, stmt);
+  verifierMakeFrame(vrf, ctx, stmt);
 /* check if we have a compressed proof */
   readerSkip(vrf->r, whitespace);
   if (readerPeek(vrf->r) == '(') {
 /* get rid of the ( */
     readerGet(vrf->r);
-    verifierParseCompressedProof(vrf, frm);
+    verifierParseCompressedProof(vrf, ctx);
   } else {
-    verifierParseProof(vrf);
+    verifierParseProof(vrf, ctx);
   }
   verifierCheckProof(vrf, stmt);
 }
@@ -1298,10 +1362,11 @@ verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
     type = symType_provable;
     struct symstring stmt;
     symstringInit(&stmt);
-    struct frame frm; 
-    frameInit(&frm);
-    verifierParseProvable(vrf, &stmt, &frm);
-    verifierAddProvable(vrf, tok, &stmt, &frm);
+/* create the frame for this theorem */
+    struct frame ctx; 
+    frameInit(&ctx);
+    verifierParseProvable(vrf, &stmt, &ctx);
+    verifierAddProvable(vrf, tok, &stmt, &ctx);
   }
   if (type == symType_none) {
     verifierSetError(vrf, error_unexpectedKeyword);

@@ -106,7 +106,8 @@ preprocParseInclude(struct preproc* p, FILE* fOut)
     struct reader* r = p->r;
     preprocParseFile(p, tok, fOut);
     p->r = r;
-/* leave a special comment to indicate we are going back to the original file */
+/* leave a special comment to indicate we are going back to the original */
+/* file */
     fprintf(fOut, "$( %s %lu $)\n", p->r->filename.vals, p->r->line);
   }
 /* find $] */
@@ -142,8 +143,8 @@ preprocParseFile(struct preproc* p, const char* in, FILE* fOut)
   readerInitFile(&r, fIn, in);
   readerArrayAdd(p->rs, r);
   p->r = &r;
-/* leave a special comment for indicating file name and line. This is used by */
-/* the verifier when reporting errors */
+/* leave a special comment for indicating file name and line. This is used */
+/* by the verifier when reporting errors */
   fprintf(fOut, "$( %s 0 $)\n", in);
   while (!p->r->err) {
     int c = readerGet(p->r);

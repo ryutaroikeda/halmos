@@ -244,8 +244,12 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   substitutionInit(&sub);
   substitutionAdd(&sub, v1, &str1);
   substitutionAdd(&sub, v2, &str2);
-  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
-   "sub should be invalid");
+  struct frame ctx;
+  frameInit(&ctx);
+  frameAddDisjoint(&ctx, v1, v2);
+  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &ctx, &frm, &sub,
+   0, 1), "sub should be invalid");
+  frameClean(&ctx);
 /* str1 and str2 cleaned here */
   substitutionClean(&sub);
   frameClean(&frm);
@@ -259,14 +263,20 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   substitutionInit(&sub);
   substitutionAdd(&sub, v1, &str1);
   substitutionAdd(&sub, v2, &str2);
-  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
-    "sub should be invalid");
+  frameInit(&ctx);
+  frameAddDisjoint(&ctx, v1, v2);
+  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &ctx, &frm, &sub,
+    0, 1), "sub should be invalid");
   frameAddDisjoint(&frm, v1, v3);
-  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
-    "sub should be invalid");
+  frameAddDisjoint(&ctx, v1, v3);
+  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &ctx, &frm, &sub,
+   0, 1), "sub should be invalid");
   frameAddDisjoint(&frm, v2, v3);
-  ut_assert(verifierIsValidDisjointPairSubstitution(&vrf, &frm, &sub, 0, 1),
-    "sub should be valid");
+  ut_assert(!verifierIsValidDisjointPairSubstitution(&vrf, &ctx, &frm, &sub,
+   0, 1), "sub should be invalid");
+  frameAddDisjoint(&ctx, v2, v3);
+  ut_assert(verifierIsValidDisjointPairSubstitution(&vrf, &ctx, &frm, &sub, 
+    0, 1), "sub should be valid");
   substitutionClean(&sub);
   frameClean(&frm);
   readerClean(&r);
@@ -280,6 +290,7 @@ Test_verifierIsValidSubstitution(void)
   struct verifier vrf;
   struct substitution sub;
   struct frame frm;
+  struct frame ctx;
   verifierInit(&vrf);
   struct reader r;
   readerInitString(&r, "");
@@ -291,6 +302,7 @@ Test_verifierIsValidSubstitution(void)
   size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
     1, 0, 0, 0, 0, 0, 0, 0);
   frameInit(&frm);
+  frameInit(&ctx);
 /* build the substitution */
   struct symstring str1, str2, str3;
   symstringInit(&str1);
@@ -303,13 +315,22 @@ Test_verifierIsValidSubstitution(void)
   substitutionAdd(&sub, v1, &str1);
   substitutionAdd(&sub, v2, &str2);
   substitutionAdd(&sub, v3, &str3);
-  ut_assert(verifierIsValidSubstitution(&vrf, &frm, &sub), "invalid sub");
+  ut_assert(verifierIsValidSubstitution(&vrf, &ctx, &frm, &sub),
+   "invalid sub");
   frameAddDisjoint(&frm, v2, v3);
-  ut_assert(!verifierIsValidSubstitution(&vrf, &frm, &sub),
+  ut_assert(!verifierIsValidSubstitution(&vrf, &ctx, &frm, &sub),
+    "sub should be invalid");
+  frameAddDisjoint(&ctx, v2, v3);
+  ut_assert(!verifierIsValidSubstitution(&vrf, &ctx, &frm, &sub),
     "sub should be invalid");
   frameAddDisjoint(&frm, v1, v3);
-  ut_assert(verifierIsValidSubstitution(&vrf, &frm, &sub), "invalid sub");
+  ut_assert(!verifierIsValidSubstitution(&vrf, &ctx, &frm, &sub),
+    "sub should be invalid");
+  frameAddDisjoint(&ctx, v1, v3);
+  ut_assert(verifierIsValidSubstitution(&vrf, &ctx, &frm, &sub),
+   "invalid sub");
   substitutionClean(&sub);
+  frameClean(&ctx);
   frameClean(&frm);
   readerClean(&r);
   verifierClean(&vrf);
@@ -421,13 +442,18 @@ Test_verifierApplyAssertion(void)
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, stack3, 3);
   symstringArrayAdd(&vrf.stack, stmt);
+  LOG_DEBUG("prepare context frame");
+  struct frame ctx;
+  frameInit(&ctx);
   LOG_DEBUG("apply assertion");
-  verifierApplyAssertion(&vrf, tyx);
+  verifierApplyAssertion(&vrf, &ctx, tyx);
   ut_assert(!vrf.err, "assertion application failed");
   symstringInit(&stmt);
   size_tArrayAppend(&stmt, res, 3);
   ut_assert(symstringIsEqual(&vrf.stack.vals[0], &stmt), "result of assertion "
     "application is wrong");
+  LOG_DEBUG("clean up");
+  frameClean(&ctx);
   symstringClean(&stmt);
   readerClean(&r);
 /* frm is cleaned here */
@@ -788,10 +814,12 @@ Test_verifierParseProofSymbol(void)
   for (i = 0; i < file_size; i++) {
     readerInitString(&r[i], file[i]);
   }
+  struct frame ctx;
+  frameInit(&ctx);
 #define test_file(f, error) \
 do { \
   verifierBeginReadingFile(&vrf, &r[f]); \
-  verifierParseProofSymbol(&vrf, &isEndOfProof); \
+  verifierParseProofSymbol(&vrf, &ctx, &isEndOfProof); \
   check_err(vrf.err, error); \
   readerClean(&r[f]); \
 } while (0)
@@ -811,6 +839,7 @@ do { \
   test_file(3, error_none);
   ut_assert(vrf.stack.size == 2, "stack size == %lu, should be 2",
     vrf.stack.size);
+  frameClean(&ctx);
   verifierClean(&vrf);
   return 0;
 #undef test_file
@@ -845,10 +874,12 @@ Test_verifierParseProof(void)
     symstringInit(&thms[i]);
     size_tArrayAppend(&thms[i], thms_s[i], thms_len[i]);
   }
+  struct frame ctx;
+  frameInit(&ctx);
 #define test_file(f, error) \
 do { \
   verifierBeginReadingFile(&vrf, &r[f]); \
-  verifierParseProof(&vrf); \
+  verifierParseProof(&vrf, &ctx); \
   verifierCheckProof(&vrf, &thms[f]); \
   check_err(vrf.err, error); \
   readerClean(&r[f]); \
@@ -865,6 +896,7 @@ do { \
   for (i = 0; i < file_size; i++) {
     symstringClean(&thms[i]);
   }
+  frameClean(&ctx);
   verifierClean(&vrf);
   return 0;
 #undef test_file
@@ -931,7 +963,7 @@ Test_verifierParseUnlabelledStatement(void)
   const char* file[file_size] = {
     "the muttering retreats $. ",
     "Of restless nights in one-night cheap hotels $. ",
-    "And sawdust restaurants with oyster-shells: "
+    "And sawdust restaurants with oyster-shells: ",
   };
   const enum error errs[file_size] = {
     error_none,
@@ -1035,7 +1067,7 @@ Test_verifierParseStatement(void)
 static int
 Test_verifierParseBlock(void)
 {
-  enum { file_size = 3 };
+  enum { file_size = 4 };
   const char* file[file_size] = {
 /* file 0 */
     "$c |- wff S 0 $. "
@@ -1057,31 +1089,54 @@ Test_verifierParseBlock(void)
     "thm.succ2 $p num S S x $= num.x a.num.succ a.num.succ $.\n",
 /* file 2 - test compressed proof */
     "$c |- num S 0 $. $v x y $. "
+    "numt.0 $a num 0 $. "
     "num.0 $a |- num 0 $. "
     "num.x $f num x $. "
     "num.succ $a |- num S x $. "
-    "thm $p |- num S 0 $= ( num.0 num.succ ) "
+    "thm $p |- num S 0 $= ( numt.0 num.succ ) "
     "AB $. \n",
 /* file 3 - test disjoint variable restriction */
-    // "$c "
-/* to do: write test with Z tag */
+    "$c | $. \n"
+    "$v x y B R $. \n"
+    "tx $f | x $. ty $f | y $. tB $f | B $. tR $f | R $. \n"
+    "${ $d x y $.  $d y B $.  $d y R $. $} \n",
+/* to do: write test for compressed proof with Z tag */
 
   };
   const enum error errs[file_size] = {
     error_none,
     error_none,
-    error_none
+    error_none,
+    error_none,
+  };
+  const size_t errc[file_size] = {
+    0,
+    0,
+    0,
+    0,
+  };
+  const size_t dsymnum[file_size] = {
+    0,
+    0,
+    0,
+    3
   };
   size_t i;
   for (i = 0; i < file_size; i++) {
     LOG_DEBUG("testing file %lu", i);
     struct verifier vrf;
     verifierInit(&vrf);
+    verifierSetVerbosity(&vrf, 5);
     struct reader r;
     readerInitString(&r, file[i]);
     verifierBeginReadingFile(&vrf, &r);
     verifierParseBlock(&vrf);
     check_err(vrf.err, errs[i]);
+    ut_assert(vrf.symCount[symType_disjoint] == dsymnum[i],
+      "found %lu disjoint pairs, expected %lu", vrf.symCount[symType_disjoint],
+      dsymnum[i]);
+    ut_assert(vrf.errc == errc[i], "found %lu errors, expected %lu",
+      vrf.errc, errc[i]);
     readerClean(&r);
     verifierClean(&vrf);
   }
