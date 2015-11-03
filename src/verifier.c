@@ -495,7 +495,7 @@ verifierDeactivateDisjointVariableRestrictions(struct verifier* vrf)
   size_t i;
   DEBUG_ASSERT(vrf->disjointScope.size > 0, "disjointScope empty");
   size_t end = vrf->disjointScope.vals[vrf->disjointScope.size - 1];
-  for (i = vrf->disjoint1.size; i > end; i--) {
+  for (i = 0; i < end; i++) {
     vrf->disjoint1.size--;
     vrf->disjoint2.size--;
   }
