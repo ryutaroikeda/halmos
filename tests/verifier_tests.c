@@ -231,11 +231,13 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   size_tArrayAdd(&vrf.disjointScope, 0);
   LOG_DEBUG("adding symbols");
   size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 
-    1, 0, 0, 0, 0, 0, 0, 0);
+    1, 0, 0, 0, 0, 0, 0, 0, 0);
   size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0);
-  size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0);
+    1, 0, 0, 0, 0, 0, 0, 0, 0);
+  // size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
+    // 1, 0, 0, 0, 0, 0, 0, 0, 0);
+  // this stops the leak -- why?
+  size_t v3 = verifierAddSymbol(&vrf, "v3", symType_variable);
   LOG_DEBUG("adding disjoints");
   frameInit(&frm);
   frameAddDisjoint(&frm, v1, v2);
@@ -302,11 +304,11 @@ Test_verifierIsValidSubstitution(void)
   verifierBeginReadingFile(&vrf, &r);
   size_tArrayAdd(&vrf.disjointScope, 0);
   size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0);
+    1, 0, 0, 0, 0, 0, 0, 0, 0);
   size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0);
+    1, 0, 0, 0, 0, 0, 0, 0, 0);
   size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0);
+    1, 0, 0, 0, 0, 0, 0, 0, 0);
   frameInit(&frm);
   frameInit(&ctx);
 /* build the substitution */
@@ -361,11 +363,11 @@ Test_verifierUnify(void)
   readerInitString(&r, "");
   verifierBeginReadingFile(&vrf, &r);
   verifierAddSymbolExplicit(&vrf, "type", symType_constant, 0, 0, 0, 0, 0, 0,
-    0, 0);
+    0, 0, 0);
   verifierAddSymbolExplicit(&vrf, "v", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-    0);
-  verifierAddSymbolExplicit(&vrf, "type2", symType_constant, 0, 0, 0, 0, 0, 0,
     0, 0);
+  verifierAddSymbolExplicit(&vrf, "type2", symType_constant, 0, 0, 0, 0, 0, 0,
+    0, 0, 0);
   symstringInit(&str);
   symstringInit(&floating);
   size_tArrayAppend(&str, strVals, 4);
@@ -1137,6 +1139,7 @@ Test_verifierParseBlock(void)
     struct reader r;
     readerInitString(&r, file[i]);
     verifierBeginReadingFile(&vrf, &r);
+    // verifierSetVerbosity(&vrf, 5);
     verifierParseBlock(&vrf);
     check_err(vrf.err, errs[i]);
     ut_assert(vrf.symCount[symType_disjoint] == dsymnum[i],

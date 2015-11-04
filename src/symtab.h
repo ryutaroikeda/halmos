@@ -46,8 +46,8 @@ struct symnode;
 struct symnode {
 /* hash */
   uint32_t h;
-/* pointer to the symbol. If p is NULL, we are in an empty node */
-  struct symbol* p;
+/* index to the symbol in the array. If p is 0, we are in an empty node */
+  size_t symId;
 /* if there is a collision, point to the next node */
 /* If NULL, there are no more nodes */
   struct symnode* next;
@@ -60,10 +60,11 @@ struct symtree {
   struct symtree* more;
 };
 
-struct symtab {
-  struct symtree t;
-/* we want the symbol table here, but keep it in verifier for now */
-};
+// struct symtab {
+//   struct symtree t;
+//  we want the symbol table here, but keep it in verifier for now 
+//   size_t seed;
+// };
 
 void
 symbolInit(struct symbol* sym);
@@ -78,7 +79,7 @@ void
 symnodeClean(struct symnode* n);
 
 void
-symnodeInsert(struct symnode* n, uint32_t h, struct symbol* p);
+symnodeInsert(struct symnode* n, uint32_t h, size_t symId);
 
 void
 symtreeInit(struct symtree* t);
@@ -88,16 +89,25 @@ symtreeClean(struct symtree* t);
 
 /* insert p with key h */
 void
-symtreeInsert(struct symtree* t, uint32_t h, struct symbol* p);
+symtreeInsert(struct symtree* t, uint32_t h, size_t symId);
 
-/* find the first node with the given hash */
-struct symnode*
+/* find the first subtree with node of the given hash, or if none exists, */
+/* the last subtree searched */
+struct symtree*
 symtreeFind(struct symtree* t, uint32_t h);
 
-void
-symtabInit(struct symtab* tab);
+// void
+// symtabInit(struct symtab* tab);
 
-void
-symtabClean(struct symtab* tab);
+// void
+// symtabClean(struct symtab* tab);
+
+// void
+// symtabAdd(struct symtab* tab, struct symbol* sym);
+
+/* find the subtree matching the hash of sym, or if none exists, the last */
+/* subtree searched */
+// struct symtree*
+// symtabFind(struct symtab* tab, const char* sym);
 
 #endif

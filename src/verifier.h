@@ -50,10 +50,12 @@ extern const size_t symbol_none_id;
 extern const size_t file_none_id;
 
 struct verifier {
-/* a special symbol with symId 0 */
-  struct symbol symbol_none;
+/* a special symbol for indicating no symbol */
+  // struct symbol symbol_none;
 /* a table of symbols */
   struct symbolArray symbols;
+/* for looking up symbols */
+  struct symtree tab;
   struct symstringArray stmts;
   struct frameArray frames;
 /* disjoint variable restrictions currently in scope */
@@ -98,19 +100,13 @@ void
 verifierEmptyStack(struct verifier* vrf);
 
 size_t
-verifierGetSymId(const struct verifier* vrf, const char* sym);
-
-// size_t
-// verifierAddFile(struct verifier* vrf, struct reader* r);
-
-// void
-// verifierBeginReadingFile(struct verifier* vrf, size_t rId);
+verifierGetSymId(struct verifier* vrf, const char* sym);
 
 /* return the symId of the symbol added */
 size_t
 verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
  enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
- size_t frame, size_t file, size_t line, size_t offset);
+ size_t frame, size_t file, size_t line, size_t offset, uint32_t hash);
 
 size_t
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type);

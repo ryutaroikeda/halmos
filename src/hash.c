@@ -34,9 +34,8 @@ uint32_t hash_murmur3(const char* str, size_t len, uint32_t seed)
     h = (h << r2) | (h >> (32 - r2));
     h = h * m + n;
   }
-  const uint8_t* tail = (uint8_t*)&blocks[len];
+  const uint8_t* tail = (uint8_t*)&blocks[block_size];
   uint32_t k1 = 0;
-/* swap the bytes around */
   switch (len & 3) {
   case 3:
     k1 ^= tail[2] << 16;

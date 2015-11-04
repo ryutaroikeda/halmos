@@ -1,4 +1,5 @@
 #include "verifier.h"
+#include "hash.h"
 #include "logger.h"
 
 DEFINE_ARRAY(symbol)
@@ -23,24 +24,6 @@ symTypeString(enum symType type)
 
 const size_t symbol_none_id = 0;
 const size_t file_none_id = 0;
-
-void
-symbolInit(struct symbol* sym)
-{
-  charArrayInit(&sym->sym, 1);
-  sym->type = symType_none;
-  sym->isActive = 0;
-  sym->isTyped = 0;
-  sym->scope = 0;
-  sym->stmt = 0;
-  sym->frame = 0;
-}
-
-void
-symbolClean(struct symbol* sym)
-{
-  charArrayClean(&sym->sym);
-}
 
 void
 frameInit(struct frame* frm)
@@ -103,10 +86,14 @@ verifierInit(struct verifier* vrf)
 {
   size_t i;
   symbolArrayInit(&vrf->symbols, 1);
-  /* add symbol_none */
-  symbolInit(&vrf->symbol_none);
-  charArrayAppend(&vrf->symbol_none.sym, "$none", 5 + 1);
-  symbolArrayAdd(&vrf->symbols, vrf->symbol_none);
+/* add symbol_none. This is not added to tab */
+  struct symbol none;
+  symbolInit(&none);
+  charArrayAppend(&none.sym, "$none", 5 + 1);
+  symbolArrayAdd(&vrf->symbols, none);
+  symtreeInit(&vrf->tab);
+  // verifierAddSymbolExplicit(vrf, "$none", symType_none, 0, 0, 0, 0, 0, 0, 0, 0,
+  //  hash_murmur3("$none", 5, 0));
   symstringArrayInit(&vrf->stmts, 1);
   frameArrayInit(&vrf->frames, 1);
   size_tArrayInit(&vrf->disjoint1, 1);
@@ -155,6 +142,7 @@ verifierClean(struct verifier* vrf)
     symstringClean(&vrf->stmts.vals[i]);
   }
   symstringArrayClean(&vrf->stmts);
+  symtreeClean(&vrf->tab);
   for (i = 0; i < vrf->symbols.size; i++) {
     symbolClean(&vrf->symbols.vals[i]);
   }
@@ -183,7 +171,7 @@ verifierSetError(struct verifier* vrf, enum error err)
 }
 
 size_t
-verifierGetSymId(const struct verifier* vrf, const char* sym)
+verifierGetSymId(struct verifier* vrf, const char* sym)
 {
   size_t i;
   DEBUG_ASSERT(sym, "given symbol is NULL");
@@ -195,6 +183,21 @@ verifierGetSymId(const struct verifier* vrf, const char* sym)
       return i;
     }
   }
+//   uint32_t hash = hash_murmur3(sym, strlen(sym), 0);
+//   struct symtree* t = symtreeFind(&vrf->tab, hash);
+//   if (t->node.h == hash) {
+// /* this is either a match or a hash collision */
+//     struct symnode* n = &t->node;
+//     while (n != NULL) {
+//       if (n->p->isActive) {
+//         if (strcmp(n->p->sym.vals, sym) == 0) {
+// /* compute the index */
+//           return (n->p - vrf->symbols.vals);
+//         }
+//       }
+//       n = n->next;
+//     }
+//   }
   return symbol_none_id;
 }
 
@@ -321,15 +324,22 @@ verifierIsValidLabel(const struct verifier* vrf, const char* lab)
   return 1;
 }
 
+/* fix me: specify the tree to insert in */
 size_t
 verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
  enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
- size_t frame, size_t file, size_t line, size_t offset)
+ size_t frame, size_t file, size_t line, size_t offset, uint32_t hash)
 {
   size_t symId = vrf->symbols.size;
+/* symIds begin at 1 because 0 is reserved for symbol_none_id. */
+/* symbol_none_id is used in symtree to represent empty nodes. Adding 0 */
+/* could cause a leak */
+  DEBUG_ASSERT(symId != symbol_none_id, "tried adding symbol_none");
   struct symbol s;
   symbolInit(&s);
-  charArrayAppend(&s.sym, sym, strlen(sym) + 1);
+  size_t len = strlen(sym);
+/* append the sym and \0 */
+  charArrayAppend(&s.sym, sym, len + 1);
   s.type = type;
   s.isActive = isActive;
   s.isTyped = isTyped;
@@ -341,19 +351,13 @@ verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
   s.offset = offset;
   symbolArrayAdd(&vrf->symbols, s);
   vrf->symCount[type]++;
+  symtreeInsert(&vrf->tab, hash, symId);
   return symId;
 }
 
 size_t
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
 {
-/* check if the symbol is fresh */
-  size_t testId = verifierGetSymId(vrf, sym);
-  if (testId != symbol_none_id) { 
-    verifierSetError(vrf, error_duplicateSymbol);
-    LOG_ERR("%s was used before", sym);
-    return symbol_none_id;
-  }
 /* symbol names cannot contain $ */
   if (strchr(sym, '$')) {
     verifierSetError(vrf, error_invalidSymbol);
@@ -368,14 +372,23 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
       return symbol_none_id;
     }
   }
+/* determine if sym is a duplicate symbol */
+  uint32_t hash = hash_murmur3(sym, strlen(sym), 0);
+  struct symtree* t = symtreeFind(&vrf->tab, hash);
+  DEBUG_ASSERT(t->node.symId < vrf->symbols.size, "invalid symId");
+  const struct symbol* s = &vrf->symbols.vals[t->node.symId];
+  if (s->isActive && t->node.h == hash) {
+    if (strcmp(s->sym.vals, sym) == 0) {
+/* to do: print file and line num */
+      H_LOG_ERR(vrf, error_duplicateSymbol, 1, "%s was declared before", sym);
+      return symbol_none_id;
+    }
+  }
+/* add the symbol */
+/* fix me: add directly to symtree t to save doing another search */
   size_t symId = verifierAddSymbolExplicit(vrf, sym, type, 1, 0,
     vrf->scope, vrf->stmts.size, vrf->frames.size, vrf->rId,
-    vrf->r->line, vrf->r->offset);
-/* for $d, $f, $e, or $v, update the active list */
-  // if (type == symType_disjoint) {
-/* this is actually never called because AddDisjoint calls AddSymExplicit */
-    // symstringAdd(&vrf->disjoints, symId);
-  // } else 
+    vrf->r->line, vrf->r->offset, hash);
   if (type == symType_floating || type == symType_essential) {
     symstringAdd(&vrf->hypotheses, symId);
   } else if (type == symType_variable) {
@@ -415,15 +428,6 @@ verifierAddDisjoint(struct verifier* vrf, struct symstring* stmt)
   if (stmt->size > 0) {
     for (i = 0; i < stmt->size - 1; i++) {
       for (j = i + 1; j < stmt->size; j++) {
-        // size_t symId = verifierAddSymbolExplicit(vrf, "", symType_disjoint, 1,
-         // 0, vrf->scope, 0, 0, vrf->rId, vrf->r->line,
-         // vrf->r->offset);
-        // symstringAdd(&vrf->disjoints, symId);
-        // struct symstring pair;
-        // symstringInit(&pair);
-        // symstringAdd(&pair, stmt->vals[i]);
-        // symstringAdd(&pair, stmt->vals[j]);
-        // vrf->symbols.vals[symId].stmt = verifierAddStatement(vrf, &pair);
         size_tArrayAdd(&vrf->disjoint1, stmt->vals[i]);
         size_tArrayAdd(&vrf->disjoint2, stmt->vals[j]);
         vrf->disjointScope.vals[vrf->disjointScope.size - 1]++;
