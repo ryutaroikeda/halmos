@@ -360,8 +360,7 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
 {
 /* symbol names cannot contain $ */
   if (strchr(sym, '$')) {
-    verifierSetError(vrf, error_invalidSymbol);
-    LOG_ERR("%s contains $", sym);
+    H_LOG_ERR(vrf, error_invalidSymbol, 1, "%s contains $", sym);
     return symbol_none_id;
   }
   if ((type == symType_floating) || (type == symType_essential)

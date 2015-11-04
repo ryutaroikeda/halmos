@@ -31,6 +31,48 @@ Test_verifierInit(void)
 }
 
 static int
+Test_verifierAddSymbol(void)
+{
+  enum { test_size = 12 };
+  const char* names[test_size] = {
+    "c1", "c1", "c1",
+    "fad$sfgs", "$v",
+    "abcdefghijklmnopqrstuvwxyz!@#%^&*()_+\\][{}|,./<>\?",
+    "hleraiugh5&*", "@*#(Nfad", "*#V#HFU(",
+    "=-)F", "_-.fhakl", "_-.fhakl"
+  };
+  enum symType types[test_size] = {
+    symType_constant, symType_constant, symType_variable,
+    symType_constant, symType_variable,
+    symType_variable,
+    symType_floating, symType_essential, symType_assertion,
+    symType_provable, symType_floating, symType_essential
+  };
+  enum error errs[test_size] = {
+    error_none, error_duplicateSymbol, error_duplicateSymbol,
+    error_invalidSymbol, error_invalidSymbol,
+    error_none,
+    error_invalidLabel, error_invalidLabel, error_invalidLabel,
+    error_invalidLabel, error_none, error_duplicateSymbol
+  };
+  size_t i;
+  struct verifier vrf;
+  verifierInit(&vrf);
+  struct reader r;
+  readerInitString(&r, "");
+  verifierBeginReadingFile(&vrf, &r);
+  for (i = 0; i < test_size; i++) {
+    LOG_DEBUG("test %lu", i);
+    vrf.err = error_none;
+    verifierAddSymbol(&vrf, names[i], types[i]);
+    check_err(vrf.err, errs[i]);
+  }
+  readerClean(&r);
+  verifierClean(&vrf);
+  return 0;
+}
+
+static int
 Test_verifierDeactivateSymbols(void)
 {
   struct verifier vrf;
@@ -1158,6 +1200,7 @@ all(void)
 {
   ut_run(Test_frameInit);
   ut_run(Test_verifierInit);
+  ut_run(Test_verifierAddSymbol);
   ut_run(Test_verifierDeactivateSymbols);
   ut_run(Test_verifierAddDisjoint);
   ut_run(Test_verifierGetVariables);
