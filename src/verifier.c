@@ -173,31 +173,32 @@ verifierSetError(struct verifier* vrf, enum error err)
 size_t
 verifierGetSymId(struct verifier* vrf, const char* sym)
 {
-  size_t i;
   DEBUG_ASSERT(sym, "given symbol is NULL");
-  for (i = 0; i < vrf->symbols.size; i++) {
-    const struct symbol* s = &vrf->symbols.vals[i];
-    DEBUG_ASSERT(s->sym.vals, 
-      "symbol from symbol table is NULL");
-    if ((strcmp(s->sym.vals, sym) == 0) && s->isActive) {
-      return i;
+/* linear search */
+  // size_t i;
+  // for (i = 0; i < vrf->symbols.size; i++) {
+  //   const struct symbol* s = &vrf->symbols.vals[i];
+  //   DEBUG_ASSERT(s->sym.vals, 
+  //     "symbol from symbol table is NULL");
+  //   if ((strcmp(s->sym.vals, sym) == 0) && s->isActive) {
+  //     return i;
+  //   }
+  // }
+  uint32_t hash = hash_murmur3(sym, strlen(sym), 0);
+  struct symtree* t = symtreeFind(&vrf->tab, hash);
+  if (t->node.h == hash) {
+/* this is either a match or a hash collision */
+    struct symnode* n = &t->node;
+    while (n != NULL) {
+      const struct symbol* s = &vrf->symbols.vals[n->symId];
+      if (s->isActive) {
+        if (strcmp(s->sym.vals, sym) == 0) {
+          return n->symId;
+        }
+      }
+      n = n->next;
     }
   }
-//   uint32_t hash = hash_murmur3(sym, strlen(sym), 0);
-//   struct symtree* t = symtreeFind(&vrf->tab, hash);
-//   if (t->node.h == hash) {
-// /* this is either a match or a hash collision */
-//     struct symnode* n = &t->node;
-//     while (n != NULL) {
-//       if (n->p->isActive) {
-//         if (strcmp(n->p->sym.vals, sym) == 0) {
-// /* compute the index */
-//           return (n->p - vrf->symbols.vals);
-//         }
-//       }
-//       n = n->next;
-//     }
-//   }
   return symbol_none_id;
 }
 

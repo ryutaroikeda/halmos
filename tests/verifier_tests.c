@@ -73,6 +73,41 @@ Test_verifierAddSymbol(void)
 }
 
 static int
+Test_verifierGetSymId(void)
+{
+  enum { test_size = 4, symbol_size = 4 };
+  const char* syms[symbol_size] = {
+    "c1", "c2", "c3", "c3"
+  };
+  const size_t isActive[symbol_size] = {
+    1, 1, 0, 1
+  };
+  const char* query[test_size] = {
+    "c1", "c2", "c3", "undef"
+  };
+  const size_t expId[test_size] = {
+    1, 2, 4, 0
+  };
+  struct reader r;
+  readerInitString(&r, "");
+  struct verifier vrf;
+  verifierInit(&vrf);
+  verifierBeginReadingFile(&vrf, &r);
+  size_t i;
+  for (i = 0; i < symbol_size; i++) {
+    size_t symId = verifierAddSymbol(&vrf, syms[i], symType_constant);
+    vrf.symbols.vals[symId].isActive = isActive[i];
+  }
+  for (i = 0; i < test_size; i++) {
+    size_t symId = verifierGetSymId(&vrf, query[i]);
+    ut_assert(symId == expId[i], "got %lu, expected %lu", symId, expId[i]);
+  }
+  verifierClean(&vrf);
+  readerClean(&r);
+  return 0;
+} 
+
+static int
 Test_verifierDeactivateSymbols(void)
 {
   struct verifier vrf;
@@ -1201,6 +1236,7 @@ all(void)
   ut_run(Test_frameInit);
   ut_run(Test_verifierInit);
   ut_run(Test_verifierAddSymbol);
+  ut_run(Test_verifierGetSymId);
   ut_run(Test_verifierDeactivateSymbols);
   ut_run(Test_verifierAddDisjoint);
   ut_run(Test_verifierGetVariables);
