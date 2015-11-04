@@ -115,6 +115,7 @@ verifierInit(struct verifier* vrf)
   vrf->err = error_none;
   vrf->errc = 0;
   vrf->verb = 1;
+  vrf->hashc = 0;
 }
 
 void
@@ -325,6 +326,9 @@ verifierIsValidLabel(const struct verifier* vrf, const char* lab)
   return 1;
 }
 
+/* note: this should not be called except from AddSymbol */
+/* In unit testing, it is better to AddSymbol(), then set the relevant */
+/* symbol data manually. */
 /* fix me: specify the tree to insert in */
 size_t
 verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
@@ -382,6 +386,10 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
 /* to do: print file and line num */
       H_LOG_ERR(vrf, error_duplicateSymbol, 1, "%s was declared before", sym);
       return symbol_none_id;
+    } else {
+/* we have a hash collision. Record and move on */
+      vrf->hashc++;
+      H_LOG_INFO(vrf, 5, "hash collision with %s and %s", s->sym.vals, sym);
     }
   }
 /* add the symbol */

@@ -87,6 +87,8 @@ struct verifier {
   size_t errc;
 /* logging verbosity */
   size_t verb;
+/* number of hash collisions encountered */
+  size_t hashc;
 /* to do: have a dynamic array of errors */
 };
 

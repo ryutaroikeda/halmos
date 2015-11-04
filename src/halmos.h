@@ -3,11 +3,14 @@
 
 enum halmosflag {
   halmosflag_none = 0,
-  halmosflag_verbose,
-  halmosflag_summary,
-  halmosflag_preproc,
-  halmosflag_no_preproc,
-  halmosflag_no_verify,
+  halmosflag_verbose, /* set the verbosity */
+  halmosflag_summary, /* print summary at the end */
+  halmosflag_preproc, /* preprocessing only */
+  halmosflag_no_preproc, /* disable preprocessing */
+  halmosflag_no_verify, /* disable verification */
+  halmosflag_report_count, /* report count of symbols by type */
+  halmosflag_report_hash, /* report count of hash collisions */
+  halmosflag_report_time, /* report the processing time spent */
   // halmosflag_include,
   halmosflag_size
 };

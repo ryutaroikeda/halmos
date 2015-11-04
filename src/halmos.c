@@ -4,6 +4,7 @@
 #include "verifier.h"
 #include <errno.h>
 #include <stdio.h>
+#include <time.h>
 
 static const char* flags[halmosflag_size] = {
   "",
@@ -12,6 +13,9 @@ static const char* flags[halmosflag_size] = {
   "--preproc",
   "--no-preproc",
   "--no-verify",
+  "--report-count",
+  "--report-hash",
+  "--report-time",
   // "--include",
 };
 
@@ -22,6 +26,9 @@ static const size_t flagsArgc[halmosflag_size] = {
   1, /* preproc - the output file */
   0, /* no-preproc */
   0, /* no-verify */
+  0, /* report-count */
+  0, /* report-hash */
+  0, /* report-time */
   // 0, /* include */
 };
 
@@ -45,8 +52,10 @@ void
 halmosCompile(struct halmos* h, const char* filename)
 {
   size_t i;
-  struct verifier vrf;
   struct preproc p;
+  struct verifier vrf;
+  double ptime = 0.0;
+  double vrftime = 0.0;
   verifierInit(&vrf);
   preprocInit(&p);
   if (h->flags[halmosflag_verbose]) {
@@ -63,20 +72,39 @@ halmosCompile(struct halmos* h, const char* filename)
   if (!h->flags[halmosflag_no_preproc]) {
     printf("------preproc\n");
     printf("------%s\n", filename);
+    clock_t start = clock();
     preprocCompile(&p, filename, "out.mm");
+    clock_t end = clock();
+    ptime = ((double) end - start) / CLOCKS_PER_SEC;
     printf("Found %lu errors\n", p.errCount);
   }
 /* don't compile if preproc was specified */
   if (!h->flags[halmosflag_preproc] && !h->flags[halmosflag_no_verify]) {
     printf("------verifier\n");
+    clock_t start = clock();
     verifierCompile(&vrf, "out.mm");
+    clock_t end = clock();
+    vrftime = ((double) end - start) / CLOCKS_PER_SEC;
     printf("Found %lu errors\n", vrf.errc);
   }
   if (h->flags[halmosflag_summary]) {
     printf("------summary\n");
+    h->flags[halmosflag_report_count] = 1;
+    h->flags[halmosflag_report_hash] = 1;
+    h->flags[halmosflag_report_time] = 1;
+  }
+  if (h->flags[halmosflag_report_count]) {
+    printf("------symbol count\n");
     for (i = symType_constant; i < symType_size; i++) {
       printf("Parsed %lu %s symbols\n", vrf.symCount[i], symTypeString(i));
     }
+  }
+  if (h->flags[halmosflag_report_hash]) {
+    printf("------hash collision count\nFound %lu collisions\n", vrf.hashc);
+  }
+  if (h->flags[halmosflag_report_time]) {
+    printf("------processing time\npreprocessing: %lf sec\n"
+      "verification: %lf sec\n", ptime, vrftime);
   }
   preprocClean(&p);
   verifierClean(&vrf);
