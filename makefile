@@ -18,6 +18,8 @@ TESTSCRIPT=tests/runtests.sh
 
 all: $(DEPENDENCIES) $(TARGET) tests
 
+.PHONY: dev release build tests trace clean
+
 dev: CFLAGS=-g -Wextra -Wall -pedantic -Werror -Isrc $(OPTFLAGS)
 dev: all
 
@@ -35,7 +37,6 @@ src/%.d: src/%.c
 	sed -e 's:$*.o:src/$*.o:g' $@ > tmp
 	mv -f tmp $@
 
-.PHONY: clean tests
 
 $(TESTS): % : %.o $(subst $(TARGETMAIN),,$(OBJECTS))
 	$(CC) $(LIBS) -o $@ $< $(subst $(TARGETMAIN),,$(OBJECTS))
@@ -47,6 +48,13 @@ tests/%.d: tests/%.c
 	$(CC) $(CFLAGS) -MM $< -MF $@
 	sed -e 's:$*.o:tests/$*.o:g' $@ > tmp
 	mv -f tmp $@
+
+trace/trace.o: trace/trace.c
+	$(CC) -c $< -o $@
+
+trace: CFLAGS+=-finstrument-functions
+trace: $(OBJECTS) trace/trace.o
+	gcc -g $(OBJECTS) trace/trace.o -o bin/halmos_trace
 
 valgrind:
 	VALGRIND="valgrind --log-file=/tmp/valgrind-%p.log" $(MAKE)
