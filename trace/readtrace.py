@@ -4,10 +4,10 @@
 import argparse
 parser = argparse.ArgumentParser(description="Perform an analysis on the " +
     "program trace. The output gives the function name, the call count, and " +
-    "the time spent in milliseconds.")
+    "the time spent.")
 parser.add_argument("prgm", help="program that produced trace")
 parser.add_argument("trace", help="trace to read")
-parser.add_argument("-o", "--out", help="output file", default="tracesum.out")
+parser.add_argument("-o", "--out", help="output file", default=None)
 parser.add_argument('-t', '--time', help='sort by time', action="store_true")
 parser.add_argument('-c', '--call', help='sort by call', action='store_true')
 parser.add_argument('-f', '--force', help='force analysis',action="store_true")
@@ -15,15 +15,17 @@ args = parser.parse_args()
 # check file existence
 tmp = open(args.prgm)
 tmp.close()
+if not args.out:
+    args.out = args.prgm + ".sum"
 # do we need to analyze? Look at trace and analysis time stamps
-do_analyze = 0
+do_analyze = 1
 import os
 if os.path.isfile(args.out):
     trace_mtime = os.stat(args.trace).st_mtime
     out_mtime = os.stat(args.out)
-    # trace is newer than the analysis
-    if trace_mtime > out_mtime:
-        do_analyze = 1
+    # trace is older than the analysis
+    if trace_mtime < out_mtime:
+        do_analyze = 0
 if args.force:
     do_analyze = 1
 import subprocess
@@ -79,9 +81,12 @@ def analyze_trace():
         atos = subprocess.Popen("atos -d -s {0} -o {1} {2}".format(hex(slide),
          args.prgm,fn).split(' '),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
         symb, err = atos.communicate()
-        sym = symb[0:symb.find('(')] + symb[symb.find(')')+2:-1]
-        sym = sym[:43] + (sym[43:] and '..')
-        out.write("{0:45} {1:>16} {2:>16}\n".format(sym, data[0],data[1]))
+        syms = symb[0:symb.find('(')] + symb[symb.find(')')+2:-1]
+        sym, _, src = syms.partition(' ')
+        sym = sym[:22] + (sym[22:] and '..')
+        src = src[:22] + (src[22:] and '..')
+        out.write("{0:24} {1:24} {2:>14} {3:>14}\n".format(sym, src, data[0],
+            data[1]))
     out.close()
     print "wrote to {0}".format(args.out)
 

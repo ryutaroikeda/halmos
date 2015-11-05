@@ -54,7 +54,7 @@ trace/trace.o: trace/trace.c
 
 trace: CFLAGS+=-finstrument-functions
 trace: $(OBJECTS) trace/trace.o
-	gcc -g $(OBJECTS) trace/trace.o -o bin/halmos_trace
+	gcc -g $(OBJECTS) trace/trace.o -o trace/halmos_trace
 
 valgrind:
 	VALGRIND="valgrind --log-file=/tmp/valgrind-%p.log" $(MAKE)

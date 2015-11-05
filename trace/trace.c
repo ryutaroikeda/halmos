@@ -14,7 +14,7 @@
 
 // #include <mach/mach.h>
 // #include <mach/mach_vm.h>
-#include <mach-o/getsect.h>
+// #include <mach-o/getsect.h>
 
 static FILE* trace;
 
@@ -28,7 +28,7 @@ begin_trace(void)
     fprintf(stderr, "failed to open %s\n", trace_file);
     exit(0);
   }
-  printf("etext %p\n", (void*)get_etext());
+  // printf("etext %p\n", (void*)get_etext());
 /* get the base address of the process */
 
 /* old version: this is most probably wrong */
@@ -61,6 +61,7 @@ end_trace(void)
 {
   if (trace != NULL) {
     fclose(trace);
+    printf("wrote trace log to %s\n", trace_file);
   }
 }
 #include <stdlib.h>
