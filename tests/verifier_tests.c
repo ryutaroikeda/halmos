@@ -307,13 +307,8 @@ Test_verifierIsValidDisjointPairSubstitution(void)
   verifierBeginReadingFile(&vrf, &r);
   size_tArrayAdd(&vrf.disjointScope, 0);
   LOG_DEBUG("adding symbols");
-  size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable, 
-    1, 0, 0, 0, 0, 0, 0, 0, 0);
-  size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0, 0);
-  // size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
-    // 1, 0, 0, 0, 0, 0, 0, 0, 0);
-  // this stops the leak -- why?
+  size_t v1 = verifierAddSymbol(&vrf, "v1", symType_variable);
+  size_t v2 = verifierAddSymbol(&vrf, "v2", symType_variable);
   size_t v3 = verifierAddSymbol(&vrf, "v3", symType_variable);
   LOG_DEBUG("adding disjoints");
   frameInit(&frm);
@@ -380,12 +375,9 @@ Test_verifierIsValidSubstitution(void)
   readerInitString(&r, "");
   verifierBeginReadingFile(&vrf, &r);
   size_tArrayAdd(&vrf.disjointScope, 0);
-  size_t v1 = verifierAddSymbolExplicit(&vrf, "v1", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0, 0);
-  size_t v2 = verifierAddSymbolExplicit(&vrf, "v2", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0, 0);
-  size_t v3 = verifierAddSymbolExplicit(&vrf, "v3", symType_variable,
-    1, 0, 0, 0, 0, 0, 0, 0, 0);
+  size_t v1 = verifierAddSymbol(&vrf, "v1", symType_variable);
+  size_t v2 = verifierAddSymbol(&vrf, "v2", symType_variable);
+  size_t v3 = verifierAddSymbol(&vrf, "v3", symType_variable);
   frameInit(&frm);
   frameInit(&ctx);
 /* build the substitution */
@@ -425,12 +417,6 @@ Test_verifierIsValidSubstitution(void)
 static int
 Test_verifierUnify(void)
 {
-  const size_t type = 0;
-  const size_t var = 1;
-  const size_t type2 = 2;
-  const size_t strVals[4] = {type, var, var, var};
-  const size_t floatingVals[2] = {type, var};
-  const size_t floatingVals2[2] = {type2, var};
   struct verifier vrf;
   struct reader r;
   struct substitution sub;
@@ -439,12 +425,15 @@ Test_verifierUnify(void)
   verifierInit(&vrf);
   readerInitString(&r, "");
   verifierBeginReadingFile(&vrf, &r);
-  verifierAddSymbolExplicit(&vrf, "type", symType_constant, 0, 0, 0, 0, 0, 0,
-    0, 0, 0);
-  verifierAddSymbolExplicit(&vrf, "v", symType_variable, 0, 0, 0, 0, 0, 0, 0,
-    0, 0);
-  verifierAddSymbolExplicit(&vrf, "type2", symType_constant, 0, 0, 0, 0, 0, 0,
-    0, 0, 0);
+  size_t type = verifierAddSymbol(&vrf, "type", symType_constant);
+  vrf.symbols.vals[type].isActive = 0;
+  size_t var = verifierAddSymbol(&vrf, "var", symType_variable);
+  vrf.symbols.vals[var].isActive = 0;
+  size_t type2 = verifierAddSymbol(&vrf, "type2", symType_constant);
+  vrf.symbols.vals[type2].isActive = 0;
+  size_t strVals[4] = {type, var, var, var};
+  size_t floatingVals[2] = {type, var};
+  size_t floatingVals2[2] = {type2, var};
   symstringInit(&str);
   symstringInit(&floating);
   size_tArrayAppend(&str, strVals, 4);

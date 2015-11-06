@@ -83,6 +83,8 @@ def analyze_trace():
         symb, err = atos.communicate()
         syms = symb[0:symb.find('(')] + symb[symb.find(')')+2:-1]
         sym, _, src = syms.partition(' ')
+        if not src:
+            src = "(unknown)"
         sym = sym[:22] + (sym[22:] and '..')
         src = src[:22] + (src[22:] and '..')
         out.write("{0:24} {1:24} {2:>14} {3:>14}\n".format(sym, src, data[0],

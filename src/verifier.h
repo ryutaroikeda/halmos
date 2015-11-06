@@ -107,8 +107,9 @@ verifierGetSymId(struct verifier* vrf, const char* sym);
 /* return the symId of the symbol added */
 size_t
 verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
- enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
- size_t frame, size_t file, size_t line, size_t offset, uint32_t hash);
+  struct symtree* t, enum symType type, int isActive, int isTyped,
+  size_t scope, size_t stmt, size_t frame, size_t file, size_t line,
+  size_t offset, uint32_t hash);
 
 size_t
 verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type);

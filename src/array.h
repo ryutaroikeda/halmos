@@ -45,9 +45,12 @@ type ## ArrayAdd(struct type ## Array* a, type v) { \
 } \
 void \
 type ## ArrayAppend(struct type ## Array* a, const type* v, size_t size) { \
+  if (a->size + size > a->max) { \
+    type ## ArrayResize(a, (a->size + size) * 2); \
+  } \
   size_t i; \
   for (i = 0; i < size; i++) { \
-    type ## ArrayAdd(a, v[i]); \
+    a->vals[a->size++] = v[i]; \
   } \
 } \
 void \

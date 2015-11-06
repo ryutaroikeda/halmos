@@ -52,7 +52,7 @@ tests/%.d: tests/%.c
 trace/trace.o: trace/trace.c
 	$(CC) -c $< -o $@
 
-trace: CFLAGS+=-finstrument-functions
+trace: CFLAGS+=-O2 -finstrument-functions
 trace: $(OBJECTS) trace/trace.o
 	gcc -g $(OBJECTS) trace/trace.o -o trace/halmos_trace
 

@@ -9,17 +9,27 @@ DECLARE_ARRAY(symstring)
 /* we do this to be able to write 'struct symstring' */
 #define symstring size_tArray
 
-void
-symstringInit(struct symstring* symstr);
+static const size_t default_size = 64;
 
-void
-symstringClean(struct symstring* symstr);
+#define symstringInit(symstr) size_tArrayInit((symstr), default_size)
 
-void
-symstringAdd(struct symstring* symstr, size_t symId);
+#define symstringClean(symstr) size_tArrayClean((symstr))
 
-void
-symstringAppend(struct symstring* a, const struct symstring* b);
+#define symstringAdd(symstr, symId) size_tArrayAdd((symstr), (symId))
+
+#define symstringAppend(a, b) size_tArrayAppend((a), (b)->vals, (b)->size)
+
+// void
+// symstringInit(struct symstring* symstr);
+
+// void
+// symstringClean(struct symstring* symstr);
+
+// void
+// symstringAdd(struct symstring* symstr, size_t symId);
+
+// void
+// symstringAppend(struct symstring* a, const struct symstring* b);
 
 void
 symstringInsert(struct symstring* a, size_t idx, const struct symstring* b);

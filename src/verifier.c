@@ -185,6 +185,7 @@ verifierGetSymId(struct verifier* vrf, const char* sym)
   //     return i;
   //   }
   // }
+/* binary tree search */
   uint32_t hash = hash_murmur3(sym, strlen(sym), 0);
   struct symtree* t = symtreeFind(&vrf->tab, hash);
   if (t->node.h == hash) {
@@ -331,9 +332,10 @@ verifierIsValidLabel(const struct verifier* vrf, const char* lab)
 /* symbol data manually. */
 /* fix me: specify the tree to insert in */
 size_t
-verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
- enum symType type, int isActive, int isTyped, size_t scope, size_t stmt, 
- size_t frame, size_t file, size_t line, size_t offset, uint32_t hash)
+verifierAddSymbolExplicit(struct verifier* vrf, const char* sym, 
+  struct symtree* t, enum symType type, int isActive, int isTyped,
+  size_t scope, size_t stmt, size_t frame, size_t file, size_t line,
+  size_t offset, uint32_t hash)
 {
   size_t symId = vrf->symbols.size;
 /* symIds begin at 1 because 0 is reserved for symbol_none_id. */
@@ -356,7 +358,7 @@ verifierAddSymbolExplicit(struct verifier* vrf, const char* sym,
   s.offset = offset;
   symbolArrayAdd(&vrf->symbols, s);
   vrf->symCount[type]++;
-  symtreeInsert(&vrf->tab, hash, symId);
+  symtreeInsert(t, hash, symId);
   return symId;
 }
 
@@ -393,8 +395,8 @@ verifierAddSymbol(struct verifier* vrf, const char* sym, enum symType type)
     }
   }
 /* add the symbol */
-/* fix me: add directly to symtree t to save doing another search */
-  size_t symId = verifierAddSymbolExplicit(vrf, sym, type, 1, 0,
+/* we add directly to symtree t to avoid doing another search */
+  size_t symId = verifierAddSymbolExplicit(vrf, sym, t, type, 1, 0,
     vrf->scope, vrf->stmts.size, vrf->frames.size, vrf->rId,
     vrf->r->line, vrf->r->offset, hash);
   if (type == symType_floating || type == symType_essential) {
