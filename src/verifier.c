@@ -913,8 +913,8 @@ verifierIsTyped(struct verifier* vrf, struct symstring* stmt)
     const struct symbol* sym = &vrf->symbols.vals[symId];
     if (sym->type != symType_variable) { continue; }
     if (!sym->isTyped) {
-      verifierSetError(vrf, error_untypedVariable);
-      LOG_ERR("The symbol %s is untyped", verifierGetSymName(vrf, symId));
+      H_LOG_ERR(vrf, error_untypedVariable, 1,
+        "The symbol %s is untyped", verifierGetSymName(vrf, symId));
       return 0;
     }
   }
@@ -939,8 +939,8 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
   if (tok[0] == '$') {
     size_t len = strlen(tok);
     if (len != 2) {
-      verifierSetError(vrf, error_invalidKeyword);
-      LOG_ERR("%s is not a valid keyword", tok);
+      H_LOG_ERR(vrf, error_invalidKeyword, 1, 
+        "%s is not a valid keyword", tok);
     }
     if (tok[1] == end) {
       *isEndOfStatement = 1;
@@ -952,8 +952,8 @@ verifierParseSymbol(struct verifier* vrf, int* isEndOfStatement, char end)
   }
 /* check for end of file */
   if (vrf->r->err == error_endOfString || vrf->r->err == error_endOfFile) {
-    verifierSetError(vrf, error_unterminatedStatement);
-    LOG_ERR("reached end of file before $%c", end);
+    H_LOG_ERR(vrf, error_unterminatedStatement, 1,
+    "reached end of file before $%c", end);
     return tok;
   }
   return tok;
@@ -1014,8 +1014,7 @@ verifierParseStatementContent(struct verifier* vrf, struct symstring* stmt,
     if (isEndOfStatement) { break; }
     symId = verifierGetSymId(vrf, tok);
     if (symId == symbol_none_id) {
-      verifierSetError(vrf, error_undefinedSymbol);
-      LOG_ERR("%s was not defined", tok);
+      H_LOG_ERR(vrf, error_undefinedSymbol, 1, "%s was not defined", tok);
     }
     symstringAdd(stmt, symId);
   }
@@ -1058,8 +1057,8 @@ verifierParseDisjoints(struct verifier* vrf, struct symstring* stmt)
 /* all symbols must be variables */
   for (i = 0; i < stmt->size; i++) {
     if (!verifierIsType(vrf, stmt->vals[i], symType_variable)) {
-      verifierSetError(vrf, error_expectedVariableSymbol);
-      LOG_ERR("%s is not a variable", verifierGetSymName(vrf, stmt->vals[i]));
+      H_LOG_ERR(vrf, error_expectedVariableSymbol, 1,
+        "%s is not a variable", verifierGetSymName(vrf, stmt->vals[i]));
     }
   }
 }
@@ -1075,14 +1074,14 @@ verifierParseFloating(struct verifier* vrf, struct symstring* stmt)
   }
   DEBUG_ASSERT(stmt->vals[0] < vrf->symbols.size, "invalid symId at vals[0]");
   if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
-    verifierSetError(vrf, error_expectedConstantSymbol);
-    LOG_ERR("%s is not a constant symbol", 
+    H_LOG_ERR(vrf, error_expectedConstantSymbol, 1, 
+      "%s is not a constant symbol", 
       verifierGetSymName(vrf, stmt->vals[0]));
   }
   DEBUG_ASSERT(stmt->vals[1] < vrf->symbols.size, "invalid symId at vals[1]");
   if (!verifierIsType(vrf, stmt->vals[1], symType_variable)) {
-    verifierSetError(vrf, error_expectedVariableSymbol);
-    LOG_ERR("%s is not a variable symbol",
+    H_LOG_ERR(vrf, error_expectedVariableSymbol, 1, 
+      "%s is not a variable symbol",
       verifierGetSymName(vrf, stmt->vals[1]));
   }
 }
@@ -1094,15 +1093,15 @@ verifierParseEssential(struct verifier* vrf, struct symstring* stmt)
   verifierParseStatementContent(vrf, stmt, '.');
   H_LOG_INFO(vrf, 6, "done parsing essential statement, checking size");
   if (stmt->size == 0) {
-    verifierSetError(vrf, error_invalidEssentialStatement);
-    LOG_ERR("essential statements must at least contain a constant symbol");
+    H_LOG_ERR(vrf, error_invalidEssentialStatement, 1, 
+      "essential statements must at least contain a constant symbol");
     return;
   }
   H_LOG_INFO(vrf, 6, "checking first symbol is a constant");
   DEBUG_ASSERT(stmt->vals[0] < vrf->symbols.size, "invalid symId");
   if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
-    verifierSetError(vrf, error_expectedConstantSymbol);
-    LOG_ERR("%s is not a constant symbol",
+    H_LOG_ERR(vrf, error_expectedConstantSymbol, 1, 
+      "%s is not a constant symbol",
       verifierGetSymName(vrf, stmt->vals[0]));
   }
   H_LOG_INFO(vrf, 6, "checking variables are typed");
@@ -1114,13 +1113,13 @@ verifierParseAssertion(struct verifier* vrf, struct symstring* stmt)
 {
   verifierParseStatementContent(vrf, stmt, '.');
   if (stmt->size == 0) {
-    verifierSetError(vrf, error_invalidAssertionStatement);
-    LOG_ERR("an assertion must have at least a constant symbol");
+    H_LOG_ERR(vrf, error_invalidAssertionStatement, 1,
+      "an assertion must have at least a constant symbol");
     return;
   }
   if (!verifierIsType(vrf, stmt->vals[0], symType_constant)) {
-    verifierSetError(vrf, error_expectedConstantSymbol);
-    LOG_ERR("%s is not a constant symbol",
+    H_LOG_ERR(vrf, error_expectedConstantSymbol, 1,
+     "%s is not a constant symbol",
       verifierGetSymName(vrf, stmt->vals[0]));
   }
   verifierIsTyped(vrf, stmt);
@@ -1139,8 +1138,7 @@ verifierParseProofSymbol(struct verifier* vrf, const struct frame* ctx,
   if (*isEndOfProof) { return; }
   size_t symId = verifierGetSymId(vrf, tok);
   if (symId == symbol_none_id) { 
-    verifierSetError(vrf, error_undefinedSymbol);
-    LOG_ERR("%s was not defined", tok);
+    H_LOG_ERR(vrf, error_undefinedSymbol, 1, "%s was not defined", tok);
     return;
   }
   verifierApplySymbolToProof(vrf, ctx, symId);
@@ -1355,15 +1353,14 @@ verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
     return;
   }
   if (keyword[0] != '$') {
-    verifierSetError(vrf, error_expectedKeyword);
-    LOG_ERR("expected a keyword after the label %s instead of %s", tok,
-     keyword);
+    H_LOG_ERR(vrf, error_expectedKeyword, 1,
+      "expected a keyword after the label %s instead of %s", tok, keyword);
     return;
   }
   size_t len = strlen(keyword);
   if (len != 2) {
-    verifierSetError(vrf, error_invalidKeyword);
-    LOG_ERR("%s is not a valid keyword", keyword);
+    H_LOG_ERR(vrf, error_invalidKeyword, 1,
+    "%s is not a valid keyword", keyword);
     return;
   }
   enum symType type = symType_none;
@@ -1396,8 +1393,8 @@ verifierParseLabelledStatement(struct verifier* vrf, const char* tok)
     verifierAddProvable(vrf, tok, &stmt, &ctx);
   }
   if (type == symType_none) {
-    verifierSetError(vrf, error_unexpectedKeyword);
-    LOG_ERR("expected $f, $e, $a, or $p instead of %s", keyword);
+    H_LOG_ERR(vrf, error_unexpectedKeyword, 1,
+      "expected $f, $e, $a, or $p instead of %s", keyword);
   }
 }
 
