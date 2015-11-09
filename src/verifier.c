@@ -1413,6 +1413,10 @@ verifierParseStatement(struct verifier* vrf, int* isEndOfScope)
 /* the file must end with a new line character, except for empty files. */
 /* note: strchr(s, 0) is always true. vrf->r->last is initialized to 0, so */
 /* empty files shouldn't raise this error */
+    if (vrf->scope != 1) {
+      H_LOG_ERR(vrf, error_unterminatedScope, 1,
+        "expected $} before end of file");
+    }
     if (!strchr("\n\f", vrf->r->last)) {
       H_LOG_ERR(vrf, error_expectedNewLine, 1,
         "expected new line at the end of file");

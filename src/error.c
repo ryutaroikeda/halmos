@@ -23,6 +23,7 @@ static const char* errorStrings[error_size] = {
   "expectedKeyword",
   "unexpectedKeyword",
   "unterminatedStatement",
+  "unterminatedScope",
   "untypedVariable",
   "invalidSymbol",
   "invalidLabel",

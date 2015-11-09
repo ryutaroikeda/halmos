@@ -23,6 +23,7 @@ enum error {
   error_expectedKeyword,
   error_unexpectedKeyword,
   error_unterminatedStatement,
+  error_unterminatedScope,
   error_untypedVariable,
   error_invalidSymbol,
   error_invalidLabel,
