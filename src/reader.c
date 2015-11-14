@@ -19,11 +19,17 @@ readerGetString(struct reader* r)
 int
 readerGetFile(struct reader* r)
 {
-  int c = getc(r->stream.f);
-  if (c == EOF) {
-    r->err = error_endOfFile;
-    return EOF;
+  if (r->bufferPos >= r-> bufferSize) {
+    r->bufferSize =
+      fread(r->buffer, sizeof(char), reader_bufferSize, r->stream.f);
+    if (r->bufferSize == 0) {
+      r->err = error_endOfFile;
+      return EOF;
+    }
+    r->bufferPos = 0;
   }
+  int c = r->buffer[r->bufferPos];
+  r->bufferPos++;
   return c;
 }
 
@@ -32,6 +38,8 @@ readerInit(struct reader* r)
 {
   charArrayInit(&r->tok, 256);
   charArrayInit(&r->filename, 256);
+  memset(r->buffer, 0, reader_bufferSize);
+  r->bufferSize = 0;
   r->line = 1;
   r->offset = 0;
   r->skipped = 0;

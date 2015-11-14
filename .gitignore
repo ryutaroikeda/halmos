@@ -18,4 +18,4 @@ tests/*_tests
 trash/
 
 *.out*
-
+*.sum

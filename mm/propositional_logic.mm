@@ -377,3 +377,64 @@ ${ $( nested modus ponens deduction $)
 	mpdd.2 a2d $( |- ( ph -> ( ( ps -> ch ) -> ( ps -> th ) ) ) $)
 	mdp  $.
 $}
+
+${ $( nested modus ponens deduction $)
+	mpid.1 $e |- ( ph -> ch ) $.
+	mpid.2 $e |- ( ph -> ( ps -> ( ch -> th ) ) ) $.
+	mpid $p |- ( ph -> ( ps -> th ) ) $=
+	wph wps wch wth
+	wph wch wps
+	mpid.1 a1d $( ph -> ( ps -> ch ) $)
+	mpid.2 mpdd $.
+$}	
+
+${ $( nested modus ponens deduction $)
+	mpdi.1 $e |- ( ps -> ch ) $.
+	mpdi.2 $e |- ( ph -> ( ps -> ( ch -> th ) ) ) $.
+	mpdi $p |- ( ph -> ( ps -> th ) ) $=
+	wph wps wch wth
+	wps wch wi wph
+	mpdi.1 a1i $( |- ph -> ( ps -> ch ) $)
+	mpdi.2
+	mpdd $.
+$}
+
+${ $( doubly nested modus ponens inference $)
+	mpii.1 $e |- ch $.
+	mpii.2 $e |- ( ph -> ( ps -> ( ch -> th ) ) ) $.
+	mpii $p |- ( ph -> ( ps -> th ) ) $=
+	wph wps wch wth
+	wch wps
+	mpii.1 a1i $( ( ps -> ch ) $)
+	mpii.2
+	mpdi $.
+$}
+
+${ $( syllogism deduction $)
+	syld.1 $e |- ( ph -> ( ps -> ch ) ) $.
+	syld.2 $e |- ( ph -> ( ch -> th ) ) $.
+	syld $p |- ( ph -> ( ps -> th ) ) $=
+	wph wps wch wth
+	syld.1
+	wph wch wth wi wps
+	syld.2
+	a1d $( |- ( ph -> ( ps -> ( ch -> th ) ) ) $)
+	mpdd $.
+$}
+
+${ $( double modus ponens deduction $)
+	mp2d.1 $e |- ( ph -> ps ) $.
+	mp2d.2 $e |- ( ph -> ch ) $.
+	mp2d.3 $e |- ( ph -> ( ps -> ( ch -> th ) ) ) $.
+	mp2d $p |- ( ph -> th ) $=
+	wph wps wth
+	mp2d.1
+	wph wps wch wth
+	wph wch wps
+	mp2d.2 a1d $( |- ( ph -> ( ps -> ch ) ) $)
+	mp2d.3 mpdd $( ( ph -> ( ps -> th ) ) $)
+	mdp $.
+$}
+
+
+

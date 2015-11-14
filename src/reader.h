@@ -9,11 +9,19 @@ struct reader;
 
 typedef int (*charGetter)(struct reader*);
 
+enum { reader_bufferSize = 4096 };
+
 struct reader {
   union {
     FILE* f;
     const char* s;
   } stream;
+/* buffer for file read */
+  char buffer[reader_bufferSize];
+/* the number of characters available in the buffer */
+  size_t bufferSize;
+/* current position in the buffer */
+  size_t bufferPos;
   struct charArray tok;
   struct charArray filename;
   size_t line;
