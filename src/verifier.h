@@ -3,34 +3,10 @@
 #include "array.h"
 #include "charstring.h"
 #include "error.h"
+#include "frame.h"
 #include "reader.h"
 #include "symstring.h"
 #include "symtab.h"
-
-struct frame;
-typedef struct frame frame;
-DECLARE_ARRAY(frame)
-
-/* frame, for assertions and provables. This is not an extended frame */
-struct frame {
-/* indices to verifier->stmts. These are mandatory hypotheses */
-  struct size_tArray stmts;
-/* indices to verifier->symbols for pairwise disjoint variables */
-  struct size_tArray disjoint1;
-  struct size_tArray disjoint2;
-};
-
-void
-frameInit(struct frame* frm);
-
-void
-frameClean(struct frame* frm);
-
-void
-frameAddDisjoint(struct frame* frm, size_t v1, size_t v2);
-
-int
-frameAreDisjoint(const struct frame* frm, size_t v1, size_t v2);
 
 /* data for processing compressed proofs */
 struct proof {
@@ -50,8 +26,6 @@ extern const size_t symbol_none_id;
 extern const size_t file_none_id;
 
 struct verifier {
-/* a special symbol for indicating no symbol */
-  // struct symbol symbol_none;
 /* a table of symbols */
   struct symbolArray symbols;
 /* for looking up symbols */

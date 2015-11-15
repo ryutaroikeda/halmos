@@ -11,6 +11,7 @@ enum halmosflag {
   halmosflag_report_count, /* report count of symbols by type */
   halmosflag_report_hash, /* report count of hash collisions */
   halmosflag_report_time, /* report the processing time spent */
+  halmosflag_help, /* show help message */
   // halmosflag_include,
   halmosflag_size
 };

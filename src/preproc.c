@@ -11,7 +11,11 @@ preprocInit(struct preproc* p)
 {
   p->rs = xmalloc(sizeof(struct readerArray));
   readerArrayInit(p->rs, 1);
-  p->r = NULL;
+  /* add an empty reader, required for P_LOG */
+  struct reader r;
+  readerInitString(&r, "");
+  readerArrayAdd(p->rs, r);
+  p->r = &p->rs->vals[0];
   p->err = error_none;
   p->errCount = 0;
 }
@@ -134,7 +138,7 @@ void
 preprocParseFile(struct preproc* p, const char* in, FILE* fOut)
 {
   FILE* fIn = fopen(in, "r");
-  if (!fIn) {
+  if (fIn == NULL) {
     P_LOG_ERR(p, error_failedOpenFile, "failed to open input file %s", in);
     return;
   }

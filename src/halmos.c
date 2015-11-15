@@ -16,6 +16,7 @@ static const char* flags[halmosflag_size] = {
   "--report-count",
   "--report-hash",
   "--report-time",
+  "--help",
   // "--include",
 };
 
@@ -32,6 +33,14 @@ static const size_t flagsArgc[halmosflag_size] = {
   // 0, /* include */
 };
 
+static const char* help =
+"NAME\n"
+"\thalmos, a compiler for the halmos language\n"
+"\n"
+"SYNOPSIS\n"
+"\thalmos [optons] file\n"
+"\n"
+"DESCRIPTION\n";
 void
 halmosInit(struct halmos* h)
 {
@@ -58,6 +67,11 @@ halmosCompile(struct halmos* h, const char* filename)
   double vrftime = 0.0;
   verifierInit(&vrf);
   preprocInit(&p);
+  if (h->flags[halmosflag_help]) {
+    printf("%s", help);
+    h->flags[halmosflag_no_preproc] = 1;
+    h->flags[halmosflag_no_verify] = 1;
+  }
   if (h->flags[halmosflag_verbose]) {
     errno = 0;
     size_t verb = strtoul(h->flagsArgv[halmosflag_verbose][0], NULL, 10);
@@ -76,6 +90,10 @@ halmosCompile(struct halmos* h, const char* filename)
     preprocCompile(&p, filename, "out.mm");
     clock_t end = clock();
     ptime = ((double) end - start) / CLOCKS_PER_SEC;
+    /* don't verify if preproc failed */
+    if (p.errCount > 0) {
+      h->flags[halmosflag_no_verify] = 1;
+    }
     printf("Found %lu errors\n", p.errCount);
   }
 /* don't compile if preproc was specified */

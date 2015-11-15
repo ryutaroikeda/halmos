@@ -27,10 +27,9 @@ Test_readerGet(void)
     ut_assert(r.err == error_none, ".err == %s, expected None",
      errorString(r.err));
   }
-  c = readerGet(&r);
-  ut_assert(c == 0, "get() == %c, expected 0", c);
-  ut_assert(r.err == error_endOfString, ".err == %s, expected %s",
-    errorString(r.err), errorString(error_endOfString));
+  readerGet(&r);
+  ut_assert(r.err == error_endOfFile, ".err == %s, expected %s",
+    errorString(r.err), errorString(error_endOfFile));
   readerClean(&r);
   return 0;
 }
@@ -59,14 +58,15 @@ Test_readerGetToken(void)
   readerGetToken(&r, "$");
   // ut_assert(r.last == '.', "last == %c, expected '.'", r.last);
   readerClean(&r);
-  char t[1111111 + 1];
-  memset(t, 'a', 1111111);
-  t[1111111] = '\0';
+  size_t size = 1000;
+  char t[size + 1];
+  memset(t, 'a', size);
+  t[size] = '\0';
   readerInitString(&r, t);
   readerGetToken(&r, "");
-  ut_assert(r.err == error_endOfString, ".err == %s, expected %s",
-    errorString(r.err), errorString(error_endOfString));
-  t[1111110] = ' ';
+  ut_assert(r.err == error_endOfFile, ".err == %s, expected %s",
+    errorString(r.err), errorString(error_endOfFile));
+  t[size - 1] = ' ';
   readerClean(&r);
   readerInitString(&r, t);
   readerGetToken(&r, " ");
@@ -94,8 +94,8 @@ Test_readerSkip(void)
   c = readerGet(&r);
   ut_assert(c == 'r', "get() == %c, expected r", c);
   readerSkip(&r, "tileground\nWithwallsandtowersweregirdledround; ");
-  ut_assert(r.err == error_endOfString, ".err == %s, expected %s",
-    errorString(r.err), errorString(error_endOfString));
+  ut_assert(r.err == error_endOfFile, ".err == %s, expected %s",
+    errorString(r.err), errorString(error_endOfFile));
   ut_assert(r.last == ';', "last == %c, expected ;", r.last);
   readerClean(&r);
   return 0;

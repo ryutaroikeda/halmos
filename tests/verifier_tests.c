@@ -3,6 +3,7 @@
 #include "unittest.h"
 #include "reader.h"
 #include "verifier.h"
+#include "frame.h"
 
 #define check_err(actual, expected) \
 do { \

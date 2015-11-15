@@ -16,7 +16,7 @@ TARGET=bin/halmos
 TARGETMAIN=src/main.o
 TESTSCRIPT=tests/runtests.sh
 
-all: $(DEPENDENCIES) $(TARGET) tests
+all: $(DEPENDENCIES) $(TARGET) tests tags
 
 .PHONY: dev release build tests trace clean
 
@@ -62,6 +62,9 @@ valgrind:
 clean:
 	rm -rf $(OBJECTS) $(TESTOBJECT) $(DEPENDENCIES)
 	rm -f tests/tests.log
+
+tags:
+	ctags -R
 
 ifeq (,$(filter $(MAKECMDGOALS),clean))
 -include $(DEPENDENCIES)

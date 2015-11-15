@@ -9,15 +9,15 @@ struct reader;
 
 typedef int (*charGetter)(struct reader*);
 
-enum { reader_bufferSize = 4096 };
+enum { reader_bufferSize = 1024 * 16 };
 
 struct reader {
-  union {
+  //union {
     FILE* f;
-    const char* s;
-  } stream;
+   // const char* s;
+  //} stream;
 /* buffer for file read */
-  char buffer[reader_bufferSize];
+  signed char buffer[reader_bufferSize];
 /* the number of characters available in the buffer */
   size_t bufferSize;
 /* current position in the buffer */
@@ -32,7 +32,7 @@ struct reader {
   int last;
 /* file or string */
   int mode;
-  charGetter get;
+  //charGetter get;
   enum error err;
 };
 
